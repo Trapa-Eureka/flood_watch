@@ -73,18 +73,22 @@ def _to_multipolygon_wkt(geojson_geom: dict, simplify_tolerance: float = SIMPLIF
 
 
 def load_boundaries(geojson_path: Path, level: str, name_field: str, pcode_field: Optional[str],
-                     source: str, vintage: str, batch_size: int = BATCH_SIZE, max_retries: int = 3) -> int:
+                     source: str, vintage: str, batch_size: int = BATCH_SIZE, max_retries: int = 3,
+                     is_provisional: bool = False) -> int:
     """level: 'adm3_municipality' | 'adm4_barangay' (matches the DB CHECK constraint).
     vintage: 'YYYY-MM-DD' string.
+    is_provisional: spec.md §9 Week 3-2 — ADM4(barangay) rows are flagged
+    provisional (finer-grained boundaries carry more positional-accuracy
+    uncertainty than ADM3), see supabase/migrations/*_admin_boundaries_provisional_flag.sql.
     Returns the number of rows upserted.
 
     NOTE: on_conflict=(level, psgc_code) upsert only dedupes correctly when
     psgc_code is non-null for every feature (true for ADM3 here — all 1642
     have unique codes, verified against the actual downloaded file, not the
-    HDX page's summary). If a future ADM4 load has features with a null
-    psgc_code, Postgres treats each NULL as distinct, so upsert alone won't
-    prevent duplicates for those specific rows — worth re-checking when 3-2
-    actually loads ADM4 data.
+    HDX page's summary; also verified true for ADM4's 42048 barangays before
+    the Week 3-2 load — see tools/load_adm4_boundaries.py). If a future load
+    ever has features with a null psgc_code, Postgres treats each NULL as
+    distinct, so upsert alone won't prevent duplicates for those rows.
     """
     url = f"{config.SUPABASE_URL}/rest/v1/admin_boundaries"
     data = json.loads(Path(geojson_path).read_text())
@@ -104,6 +108,7 @@ def load_boundaries(geojson_path: Path, level: str, name_field: str, pcode_field
             "geom": wkt,
             "source": source,
             "vintage": vintage,
+            "is_provisional": is_provisional,
         }
         sized_rows.append((row, len(wkt)))
 
