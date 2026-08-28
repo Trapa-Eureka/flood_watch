@@ -2,8 +2,8 @@
 render a PNG for a visual sanity check.
 
 Usage:
-  python scripts/02_visualize_scene.py --input path/to/scene.tif --output out.png
-  python scripts/02_visualize_scene.py --self-test   # verify the script logic without a real scene
+  python -m tools.visualize_scene --input path/to/scene.tif --output out.png
+  python -m tools.visualize_scene --self-test   # verify the script logic without a real scene
 """
 import argparse
 from pathlib import Path

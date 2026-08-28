@@ -3,7 +3,7 @@ only *new* flooding remains, not rivers/reservoirs that are wet year-round.
 
 Rather than running Prithvi a second time on a separate pre-event scene (today's
 session already found how hard it is to get a genuinely cloud-free optical scene
-right around a typhoon — see scripts/05_build_s2_composite.py's two failed
+right around a typhoon — see pipeline/preprocess/s2_composite.py's two failed
 attempts), this uses the JRC Global Surface Water "occurrence" layer as the
 permanent-water baseline: a global, 30m, publicly downloadable dataset giving
 the % of time (1984-2024) each pixel was observed as water. This is also the
@@ -17,25 +17,23 @@ Source: EC Joint Research Centre, public bucket, no auth needed:
   (10x10 degree tiles named by their NW corner, e.g. "120E_20N")
 
 Usage:
-  python scripts/07_baseline_diff.py \
+  python -m pipeline.baseline_diff \
       --pred data/output/marikina_inference/pred_s2_marikina_nov2_cloudmasked.tiff \
       --output data/output/marikina_new_flood.tiff
 """
 import argparse
-import sys
 from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import config  # noqa: E402
+from pipeline import config
 
 JRC_BASE_URL = (
     "https://s3.waw4-1.cloudferro.com/swift/v1/global-surface-water/"
     "download2024/Aggregated/VER1-5/occurrence"
 )
 
-# Value used in scripts/06_apply_cloud_mask.py for "excluded, cloud/invalid" pixels.
+# Value used in pipeline/preprocess/cloud_mask.py for "excluded, cloud/invalid" pixels.
 CLOUD_MASKED_VALUE = 128
 WATER_VALUE = 255
 
@@ -95,7 +93,7 @@ def fetch_permanent_water_mask(bbox, pad_ratio: float, target_transform, target_
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--pred", required=True, help="cloud-masked prediction from scripts/06_apply_cloud_mask.py")
+    parser.add_argument("--pred", required=True, help="cloud-masked prediction from pipeline/preprocess/cloud_mask.py")
     parser.add_argument("--output", required=True)
     parser.add_argument("--pad-ratio", type=float, default=0.05, help="must match what built the composite/pred")
     parser.add_argument(

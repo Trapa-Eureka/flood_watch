@@ -15,17 +15,13 @@ IMPORTANT finding: this checkpoint expects Sentinel-2 **optical** input (BLUE,
 GREEN, RED, NIR_NARROW, SWIR_1, SWIR_2 — 6 bands), not Sentinel-1 SAR. Prithvi's
 foundation pretraining corpus (HLS) is optical-only, so despite the "Sen1Floods11"
 dataset name, the publicly released Prithvi checkpoints for it were fine-tuned on
-that dataset's Sentinel-2 branch. See scripts/05_build_s2_composite.py for
+that dataset's Sentinel-2 branch. See pipeline/preprocess/s2_composite.py for
 building compatible input from real Marikina imagery.
 
 Usage:
-  python scripts/03_load_prithvi.py
+  python -m pipeline.inference.load_model
 """
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import config  # noqa: E402
+from pipeline import config
 
 from dotenv import load_dotenv  # noqa: E402
 
@@ -50,7 +46,7 @@ def main() -> int:
     n_params = sum(p.numel() for p in lightning_model.model.parameters())
     print(f"✓ Loaded successfully — parameter count: {n_params:,}")
     print("This is the real sen1floods11 fine-tuned model, ready for inference.")
-    print("Next: scripts/05_build_s2_composite.py + scripts/prithvi_inference.py")
+    print("Next: pipeline/preprocess/s2_composite.py + pipeline/inference/prithvi_inference.py")
     return 0
 
 

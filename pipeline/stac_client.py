@@ -9,17 +9,15 @@ How it works:
      and the download is skipped.
 
 Usage:
-  python scripts/01_fetch_scenes.py --search-only   # inspect search results only, no auth needed
-  python scripts/01_fetch_scenes.py                 # actually download, using .env credentials
+  python -m pipeline.stac_client --search-only   # inspect search results only, no auth needed
+  python -m pipeline.stac_client                 # actually download, using .env credentials
 """
 import argparse
 import json
 import os
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import config  # noqa: E402
+from pipeline import config
 
 from dotenv import load_dotenv  # noqa: E402
 

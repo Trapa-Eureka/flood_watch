@@ -1,5 +1,5 @@
 """Spec §7 preprocess.run: cloud mask. Fixes the false-positive problem found in
-scripts/prithvi_inference.py's output — the model was never trained on cloud
+pipeline/inference/prithvi_inference.py's output — the model was never trained on cloud
 pixels (they're excluded via ignore_index=-1 in the sen1floods11 config), so at
 inference time it has no defined behavior for them and tends to call bright
 cloud tops "water".
@@ -15,21 +15,17 @@ SCL class codes used here (ESA's standard L2A SCL legend):
   8 = cloud medium probability, 9 = cloud high probability, 10 = thin cirrus
 
 Usage:
-  python scripts/06_apply_cloud_mask.py \
+  python -m pipeline.preprocess.cloud_mask \
       --item-id <stac_item_id> --pred pred_xxx.tiff --output masked_pred.tiff
 """
 import argparse
 import os
-import sys
 from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import config  # noqa: E402
-from importlib import import_module  # noqa: E402
-
-s2_composite = import_module("05_build_s2_composite")
+from pipeline import config
+from pipeline.preprocess import s2_composite
 
 from dotenv import load_dotenv  # noqa: E402
 
@@ -103,7 +99,7 @@ def main():
     ref_band_path = band_cache / f"{item.id}_B02_10m.jp2"
     if not ref_band_path.exists():
         raise RuntimeError(
-            f"{ref_band_path} not found — run scripts/05_build_s2_composite.py for this "
+            f"{ref_band_path} not found — run `python -m pipeline.preprocess.s2_composite` for this "
             f"item first (needed to reproduce the same target grid)."
         )
 

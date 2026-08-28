@@ -1,11 +1,11 @@
 """Build a 6-band Sentinel-2 L2A composite over the Marikina AOI, in the exact
 band order Prithvi's sen1floods11 checkpoint expects: BLUE, GREEN, RED,
-NIR_NARROW, SWIR_1, SWIR_2 (see scripts/03_load_prithvi's discovery that this
-checkpoint is optical, not SAR).
+NIR_NARROW, SWIR_1, SWIR_2 (see pipeline/inference/load_model.py's discovery
+that this checkpoint is optical, not SAR).
 
 Unlike Sentinel-1 GRD, Sentinel-2 L2A tiles already carry a real CRS + affine
 transform (UTM, orthorectified) — so a plain bbox crop is valid here, no GCP
-approximation needed like in scripts/04_aoi_crop_compare.py.
+approximation needed like in tools/aoi_crop_compare.py.
 
 Downloads each band via the STAC item's assets[band].extra_fields['alternate']
 ['https']['href'] (an OAuth2-authenticated HTTPS mirror of the S3 object,
@@ -13,17 +13,15 @@ confirmed to exist on CDSE's Sentinel-2 STAC responses), crops each band to the
 AOI window, resamples the 20m bands up to the 10m grid, and stacks them.
 
 Usage:
-  python scripts/05_build_s2_composite.py --item-id <stac_item_id> --output out.tif
+  python -m pipeline.preprocess.s2_composite --item-id <stac_item_id> --output out.tif
 """
 import argparse
 import os
-import sys
 from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import config  # noqa: E402
+from pipeline import config
 
 from dotenv import load_dotenv  # noqa: E402
 
@@ -101,7 +99,7 @@ def download_band(item, band_key: str, token: str, out_dir: Path) -> Path:
 def compute_aoi_window(ref_band_path: Path, bbox, pad_ratio: float):
     """Compute the target grid (transform, height, width, crs) for an AOI bbox,
     anchored to *ref_band_path*'s own resolution/grid. Shared by the composite
-    builder and scripts/06_apply_cloud_mask.py so both align to the identical
+    builder and pipeline/preprocess/cloud_mask.py so both align to the identical
     pixel grid — pass the same ref band, bbox, and pad_ratio in both places.
     """
     import rasterio

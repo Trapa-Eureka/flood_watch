@@ -5,10 +5,10 @@
 # Kept as-is (not refactored) since it's the authoritative, tested way to run this
 # specific checkpoint — confirmed working in this repo's environment on 2026-08-28
 # against both the official example and a real Marikina composite built by
-# scripts/05_build_s2_composite.py. Requires --data_file to be a 6-band GeoTIFF in
+# pipeline/preprocess/s2_composite.py. Requires --data_file to be a 6-band GeoTIFF in
 # [BLUE, GREEN, RED, NIR_NARROW, SWIR_1, SWIR_2] order (pass
 # `--input_indices 0 1 2 3 4 5` when the file already has exactly those 6 bands,
-# as scripts/05_build_s2_composite.py produces — the default indices assume a
+# as pipeline/preprocess/s2_composite.py produces — the default indices assume a
 # 13-band raw S2 L1C stack instead).
 
 import argparse

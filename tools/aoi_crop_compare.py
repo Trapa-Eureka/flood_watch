@@ -2,7 +2,7 @@
 before/after SAR imagery.
 
 Raw Sentinel-1 GRD is georeferenced only via GCPs (ground control points), not an
-affine transform (as confirmed by scripts/02_visualize_scene.py) — so strictly
+affine transform (as confirmed by tools/visualize_scene.py) — so strictly
 speaking, a bbox crop isn't valid until proper reprojection (e.g. gdalwarp -geoloc,
 owned by spec §7's preprocess.run stage) has been done.
 
@@ -14,16 +14,14 @@ pixels. Use this only to quickly check "is there a visible signal" during the
 spike; redo the precise comparison once preprocess.run is actually implemented.
 
 Usage:
-  python scripts/04_aoi_crop_compare.py --baseline <tif> --post <tif>
+  python -m tools.aoi_crop_compare --baseline <tif> --post <tif>
 """
 import argparse
-import sys
 from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import config  # noqa: E402
+from pipeline import config
 
 
 def crop_to_aoi_approx(tif_path: Path, bbox, pad_ratio: float = 0.15):
