@@ -1,0 +1,40 @@
+# exFAT(T7) AppleDouble 사이드카 파일 — 절대 커밋하지 않는다
+._*
+.DS_Store
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 캐시 (pip/HuggingFace/torch — 전부 T7 내부로 리다이렉트되지만 혹시 몰라 방어)
+.cache/
+
+# 환경변수/자격증명 — 절대 커밋 금지
+.env
+.env.*
+!.env.example
+
+# 원본 위성 씬 / 모델 체크포인트 — 용량 크고 재생성 가능, git-lfs 없이는 커밋 금지
+data/raw/*
+!data/raw/.gitkeep
+data/output/*
+!data/output/.gitkeep
+*.SAFE/
+*.safe.zip
+*.tif
+*.tiff
+*.pt
+*.pth
+*.ckpt
+
+# Docker/빌드
+docker-compose.override.yml
+
+# Node (5주 스프린트에서 Next.js 추가 시)
+node_modules/
+.next/
