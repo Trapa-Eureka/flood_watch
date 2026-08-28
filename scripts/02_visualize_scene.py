@@ -11,15 +11,20 @@ import numpy as np
 
 
 def print_scene_info(src) -> None:
-    print("-" * 60)
+    print("-" * 60, flush=True)
     print(f"밴드 수(count):     {src.count}")
-    print(f"해상도(width x height): {src.width} x {src.height}")
+    print(f"해상도(width x height): {src.width} x {src.height}  ({src.width*src.height/1e6:.0f} Mpixel)")
     print(f"해상도(pixel size):  {src.res}")
     print(f"좌표계(CRS):        {src.crs}")
     print(f"경계(bounds):       {src.bounds}")
     print(f"dtype:              {src.dtypes}")
     print(f"nodata:             {src.nodata}")
-    print("-" * 60)
+    if src.crs is None and src.gcps[0]:
+        # Sentinel-1 GRD 원본은 보통 아핀 변환이 아니라 GCP로만 지리참조된다 —
+        # 즉 아직 지오코딩(재투영) 전이라는 뜻. 스펙 §7 preprocess.run 단계에서 처리할 부분.
+        print(f"GCP 개수:           {len(src.gcps[0])}  (GCP CRS: {src.gcps[1]})")
+        print("  → CRS가 None인 건 정상: 원본 GRD는 GCP 기반, bbox 크롭/재투영은 preprocess 단계 몫")
+    print("-" * 60, flush=True)
 
 
 def save_png(array: np.ndarray, out_path: Path, is_sar_db: bool = False) -> None:
@@ -79,6 +84,11 @@ def main():
     parser.add_argument("--input", type=str, default=None, help="rasterio가 열 수 있는 래스터 경로")
     parser.add_argument("--output", type=str, default=None, help="저장할 PNG 경로")
     parser.add_argument("--band", type=int, default=1)
+    parser.add_argument(
+        "--max-size", type=int, default=2000,
+        help="긴 변 기준 최대 픽셀 수. Sentinel-1 GRD 전체 씬은 4억+ 픽셀이라 "
+             "원본 해상도로 imshow하면 멈춘다 — overview를 이용해 다운샘플링해서 읽는다.",
+    )
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
 
@@ -92,7 +102,13 @@ def main():
 
     with rasterio.open(in_path) as src:
         print_scene_info(src)
-        band = src.read(args.band)
+
+        scale = min(1.0, args.max_size / max(src.width, src.height))
+        out_h, out_w = max(1, round(src.height * scale)), max(1, round(src.width * scale))
+        if scale < 1.0:
+            print(f"미리보기용 다운샘플: {src.width}x{src.height} → {out_w}x{out_h} (overview 이용)", flush=True)
+
+        band = src.read(args.band, out_shape=(out_h, out_w))
         save_png(band, out_path)
 
     return 0

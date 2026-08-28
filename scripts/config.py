@@ -36,7 +36,10 @@ CDSE_TOKEN_URL = (
     "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
 )
 CDSE_ODATA_URL = "https://catalogue.dataspace.copernicus.eu/odata/v1"
-CDSE_ZIPPER_URL = "https://zipper.dataspace.copernicus.eu/odata/v1"
+# 실측(2026-08-28): STAC item.assets['Product'].href가 실제로 쓰는 도메인은 download.*였다
+# (zipper.*로 처음 짐작했던 건 틀림). 폴백 경로에서만 이 상수를 쓴다 — 정상 경로는 STAC이 주는
+# href를 그대로 쓰므로 이 값과 무관하게 동작.
+CDSE_ZIPPER_URL = "https://download.dataspace.copernicus.eu/odata/v1"
 CDSE_PUBLIC_CLIENT_ID = "cdse-public"
 
 SENTINEL1_COLLECTION = "sentinel-1-grd"

@@ -71,24 +71,36 @@ def get_access_token() -> str | None:
 
 
 def download_item(item, token: str, out_dir: Path) -> Path | None:
-    """OData로 STAC item id에 대응하는 Product GUID를 찾아 zipper 엔드포인트로 다운로드."""
+    """STAC item의 assets['Product'] href(OData zipper, 전체 .SAFE zip)로 다운로드.
+
+    실측 결과 CDSE STAC(_COG 컬렉션)의 item.assets에는 이미 완성된 다운로드 URL이
+    'Product' 키로 들어있다(도메인은 download.dataspace.copernicus.eu — 처음에 zipper.*로
+    잘못 짐작했던 것을 실제 STAC 응답 보고 수정함). 이게 없는 경우에만 이름 기반 OData 검색으로 폴백.
+    """
     import requests
 
     product_name = item.id
-    # OData Products는 보통 이름에 .SAFE 접미사가 붙는다.
-    filter_name = product_name if product_name.endswith(".SAFE") else f"{product_name}.SAFE"
-    odata_search = (
-        f"{config.CDSE_ODATA_URL}/Products?$filter=Name eq '{filter_name}'&$top=1"
-    )
-    r = requests.get(odata_search, timeout=30)
-    r.raise_for_status()
-    values = r.json().get("value", [])
-    if not values:
-        print(f"  ! OData에서 {filter_name} 를 찾지 못함 — 건너뜀")
-        return None
+    download_url = None
 
-    product_id = values[0]["Id"]
-    download_url = f"{config.CDSE_ZIPPER_URL}/Products({product_id})/$value"
+    product_asset = item.assets.get("Product") if hasattr(item, "assets") else None
+    if product_asset is not None:
+        download_url = product_asset.href
+        print(f"  STAC asset에서 다운로드 URL 확보: {download_url}")
+
+    if download_url is None:
+        # 폴백: 이름 기반 OData 검색 (구버전 STAC이나 Product asset이 없는 경우)
+        filter_name = product_name if product_name.endswith(".SAFE") else f"{product_name}.SAFE"
+        odata_search = (
+            f"{config.CDSE_ODATA_URL}/Products?$filter=Name eq '{filter_name}'&$top=1"
+        )
+        r = requests.get(odata_search, timeout=30)
+        r.raise_for_status()
+        values = r.json().get("value", [])
+        if not values:
+            print(f"  ! OData에서 {filter_name} 를 찾지 못함 — 건너뜀")
+            return None
+        product_id = values[0]["Id"]
+        download_url = f"{config.CDSE_ZIPPER_URL}/Products({product_id})/$value"
 
     out_path = out_dir / f"{product_name}.zip"
     out_dir.mkdir(parents=True, exist_ok=True)
