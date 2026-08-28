@@ -134,3 +134,4 @@ data/output/*
 *.parquet
 
 README_bak.md
+/docs
