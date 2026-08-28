@@ -1,25 +1,124 @@
-# exFAT(T7) AppleDouble 사이드카 파일 — 절대 커밋하지 않는다
-._*
-.DS_Store
-
-# Python
-.venv/
-__pycache__/
-*.pyc
-*.egg-info/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
-# 캐시 (pip/HuggingFace/torch — 전부 T7 내부로 리다이렉트되지만 혹시 몰라 방어)
-.cache/
-
-# 환경변수/자격증명 — 절대 커밋 금지
+# ============================================================
+# 민감정보 / 자격증명 — 절대 커밋 금지 (범용, 모든 프로젝트 공통)
+# ============================================================
 .env
 .env.*
 !.env.example
+!.env.sample
+*.pem
+*.key
+*.keystore
+*.jks
+*.p12
+*.pfx
+*.crt
+*.cer
+*.der
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+id_ecdsa
+id_ecdsa.*
+*.gpg
+*.asc
+.npmrc
+.netrc
+.pypirc
+.pgpass
+credentials
+credentials.json
+credentials.yml
+credentials.yaml
+service-account*.json
+service_account*.json
+*-service-account.json
+gcloud-service-key.json
+firebase-adminsdk*.json
+.aws/
+.azure/
+.gcp/
+kubeconfig
+*.kubeconfig
+terraform.tfstate
+terraform.tfstate.backup
+*.tfvars
+!*.tfvars.example
+secrets.yml
+secrets.yaml
+secrets.json
+secrets.toml
+*.secret
+.htpasswd
+auth.json
+*.mobileprovision
 
-# 원본 위성 씬 / 모델 체크포인트 — 용량 크고 재생성 가능, git-lfs 없이는 커밋 금지
+# ============================================================
+# OS / 에디터
+# ============================================================
+._*
+.DS_Store
+.DS_Store?
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ============================================================
+# 로그 / 백업 / 임시파일
+# ============================================================
+*.log
+*.bak
+*.tmp
+*.orig
+.cache/
+
+# ============================================================
+# Python (범용)
+# ============================================================
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+*.egg
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+htmlcov/
+
+# ============================================================
+# Node / JS (5주 스프린트에서 Next.js 추가 시 대비)
+# ============================================================
+node_modules/
+.next/
+.nuxt/
+.vercel/
+.turbo/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ============================================================
+# Docker / 인프라
+# ============================================================
+docker-compose.override.yml
+*.pid
+
+# ============================================================
+# 이 프로젝트 전용 — 원본 위성 씬 / 모델 체크포인트
+# (용량 크고 재생성 가능, git-lfs 없이는 커밋 금지)
+# ============================================================
 data/raw/*
 !data/raw/.gitkeep
 data/output/*
@@ -31,10 +130,7 @@ data/output/*
 *.pt
 *.pth
 *.ckpt
+*.h5
+*.parquet
 
-# Docker/빌드
-docker-compose.override.yml
-
-# Node (5주 스프린트에서 Next.js 추가 시)
-node_modules/
-.next/
+README_bak.md

@@ -1,45 +1,35 @@
 # PH Flood Watch
 
-위성 기반 홍수·태풍 피해 매핑. 전체 배경/스코프/아키텍처는 [docs/spec.md](docs/spec.md), 기술 스택 선정 근거는 [docs/tech-stack.md](docs/tech-stack.md) 참고.
+**Near real-time flood mapping for the Philippines, powered by satellite imagery.**
 
-## 현재 단계: 2–3일 기술검증(go/no-go 스파이크)
+## Overview
 
-전면 개발(5주 스프린트, docs/spec.md §9) 전에 핵심 가설부터 확인 중이다:
-**Prithvi + Sentinel-1이 실제 PH 태풍 침수를 잡아내는가.** (docs/spec.md §3)
+PH Flood Watch turns satellite observations into a clear picture of where flooding happened, how large the affected area is, and how many people and buildings were likely impacted — within hours of a typhoon or monsoon event, not days.
 
-이 레포의 `scripts/`는 스파이크 전용이며, 5주 스프린트 코드(Next.js 대시보드, FastAPI 추론 서비스, Docker화 등)는 이 검증이 통과된 뒤 별도로 붙는다.
+The Philippines is hit by tropical storms year after year. Existing flood systems focus on forecasting risk *before* a storm arrives. PH Flood Watch fills the gap that comes *after*: confirming actual flood extent once the storm has passed, using the same satellites that watch the whole country continuously and for free.
 
-## 환경 설정
+## Why it matters
 
-```bash
-python3.11 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env   # CDSE_USERNAME/CDSE_PASSWORD 채우기 (dataspace.copernicus.eu 무료 가입)
-```
+- **Faster ground truth.** Flood extent is estimated directly from satellite data shortly after each event, instead of waiting on manual damage assessment.
+- **Consistent coverage.** The same method applies to every watched river basin, every event — no dependence on which areas happen to get reported on.
+- **Built for the places that need it most.** Starting with river basins that flood repeatedly and affect large populations: Marikina, Cagayan, Bicol/Naga, and Pampanga.
+- **Numbers, not just maps.** Flooded area, affected population, and affected buildings are calculated per municipality, so responders can prioritize where to act first.
 
-## 스파이크 실행 순서 (docs/spec.md §14와 대응)
+## What it provides
 
-```bash
-# 1) 설치 확인
-python scripts/00_setup_check.py
+- An interactive map showing the flooded area for each monitored event, with a before/after comparison.
+- Per-municipality statistics: flooded area, percentage of area affected, estimated population and buildings impacted.
+- A downloadable report for each event.
+- Public access to published events, so local governments, disaster response organizations, and the press can all work from the same picture.
 
-# 2) STAC 검색(+ .env 있으면 다운로드까지)
-python scripts/01_fetch_scenes.py --search-only   # 인증 없이 검색 결과만 먼저 확인
-python scripts/01_fetch_scenes.py                 # 실제 다운로드
+## A note on accuracy
 
-# 3) 씬 정보 출력 + PNG 시각화
-python scripts/02_visualize_scene.py --self-test          # 합성 데이터로 로직만 검증
-python scripts/02_visualize_scene.py --input <다운받은 파일>
+Every map and report is clearly labeled as an **AI-generated estimate**, not an official hazard determination. It is meant to complement, not replace, official information from PAGASA and local government units — always check official channels for authoritative guidance during an actual emergency.
 
-# 4) Prithvi 모델 로딩
-python scripts/03_load_prithvi.py
-```
+## Status
 
-각 단계 실행 결과는 커밋 메시지 또는 별도 노트에 기록하고, 통과/실패 판단은 docs/spec.md §3 기준을 따른다.
+This project is in early development. Technical feasibility is being validated before full build-out begins.
 
-## 주의
+---
 
-- AOI bbox(`scripts/config.py`)는 Nominatim 실측값을 기준으로 패딩한 근사치다. 정밀 유역 경계 아님.
-- 원본 씬/모델 체크포인트는 `.gitignore`로 제외된다 — 용량이 크고 재다운로드 가능.
-- Copernicus 데이터 사용 시 "Contains modified Copernicus Sentinel data" 표기 의무(docs/spec.md §8).
+*Contains modified Copernicus Sentinel data.*
