@@ -55,3 +55,21 @@ SENTINEL2_COLLECTION = "sentinel-2-l2a"
 # Step 4 tries both — falls back to 100M if 300M fails.
 PRITHVI_CHECKPOINT_PRIMARY = "ibm-nasa-geospatial/Prithvi-EO-2.0-300M-TL-Sen1Floods11"
 PRITHVI_CHECKPOINT_FALLBACK = "ibm-nasa-geospatial/Prithvi-EO-1.0-100M-sen1floods11"
+
+# --- Cloudflare R2 (spec.md §5 storage) ---------------------------------------
+# Two buckets, not one, because access patterns differ: raw scenes are
+# backend-only (never served publicly — can always be re-fetched from CDSE for
+# free anyway), while tiles/COGs are the actual dashboard-facing product and
+# need public read access. A single bucket would need Worker-level path
+# gatekeeping to enforce that split; two buckets get it for free.
+# Bucket names/account id aren't secrets (shown as-is by `wrangler whoami` /
+# `wrangler r2 bucket list`) — only the R2 API access key/secret are, and those
+# live in .env (R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY), never here.
+R2_ACCOUNT_ID = "985db8cc8abf6312655aa8fa00a5d65d"
+R2_ENDPOINT_URL = f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+R2_BUCKET_RAW = "ph-flood-watch-raw"       # scenes.fetch: original S1/S2 scenes, private
+R2_BUCKET_TILES = "ph-flood-watch-tiles"   # tiles.publish: COG/tiles for the dashboard
+# Public serving strategy (custom domain vs. a Worker read-proxy in front of
+# ph-flood-watch-tiles) is a Week 4 decision — see docs/design-notes.md.
+# Region: buckets created with the `apac` location hint to match the Supabase
+# project's ap-southeast-1 (Singapore) — see docs/design-notes.md Week 1-3.
