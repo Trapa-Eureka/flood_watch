@@ -1,17 +1,26 @@
-"""Spec §14 step 4: load the Prithvi-EO-2.0 + sen1floods11 checkpoint via TerraTorch.
+"""Spec §14 step 4: load the real Prithvi-EO-2.0 + sen1floods11 fine-tuned
+segmentation checkpoint (backbone + UperNet decoder + head), not just the
+foundation backbone.
 
-The TerraTorch API changes frequently across versions, so this script tries two
-loading paths in order:
-  A) standard loading via terratorch.tasks / BACKBONE_REGISTRY
-  B) direct HuggingFace `from_pretrained` loading (fallback)
-If both fail, the raw error is printed as-is — that's the actual point of the §3
-technical validation (whether it loads at all is the signal).
+Earlier version of this script only proved the generic pretrained *backbone*
+loads via BACKBONE_REGISTRY — it silently ignored the actual sen1floods11
+fine-tuned weights. Fixed here after finding IBM/NASA's own inference.py and
+config.yaml in the checkpoint's HuggingFace repo: the correct, working approach
+is `terratorch.cli_tools.LightningInferenceModel.from_config(config, checkpoint)`,
+which builds the exact architecture (EncoderDecoderFactory + prithvi_eo_v2_300_tl
+backbone + UperNetDecoder, see the downloaded config.yaml) and loads the
+fine-tuned weights into it.
+
+IMPORTANT finding: this checkpoint expects Sentinel-2 **optical** input (BLUE,
+GREEN, RED, NIR_NARROW, SWIR_1, SWIR_2 — 6 bands), not Sentinel-1 SAR. Prithvi's
+foundation pretraining corpus (HLS) is optical-only, so despite the "Sen1Floods11"
+dataset name, the publicly released Prithvi checkpoints for it were fine-tuned on
+that dataset's Sentinel-2 branch. See scripts/05_build_s2_composite.py for
+building compatible input from real Marikina imagery.
 
 Usage:
   python scripts/03_load_prithvi.py
-  python scripts/03_load_prithvi.py --checkpoint ibm-nasa-geospatial/Prithvi-EO-1.0-100M-sen1floods11
 """
-import argparse
 import sys
 from pathlib import Path
 
@@ -22,62 +31,32 @@ from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv()
 
-
-def try_terratorch_registry(checkpoint: str):
-    import terratorch  # noqa: F401
-    from terratorch.registry import BACKBONE_REGISTRY
-
-    print(f"[path A] trying to load via terratorch.registry.BACKBONE_REGISTRY: {checkpoint}")
-    print(f"  sample of registered backbones: {list(BACKBONE_REGISTRY)[:10]} ...")
-
-    # terratorch typically loads via a backbone name like 'prithvi_eo_v2_300_tl' with
-    # pretrained=True, and the sen1floods11 finetuned head is assembled separately
-    # from a task config (yaml). Here we only confirm the backbone itself
-    # instantiates correctly — sufficient for the spike's purpose.
-    backbone_name = "prithvi_eo_v2_300_tl" if "300M" in checkpoint else "prithvi_eo_v1_100"
-    model = BACKBONE_REGISTRY.build(backbone_name, pretrained=True)
-    return model
+CHECKPOINT_REPO = "ibm-nasa-geospatial/Prithvi-EO-2.0-300M-TL-Sen1Floods11"
+CHECKPOINT_FILE = "Prithvi-EO-V2-300M-TL-Sen1Floods11.pt"
+CONFIG_FILE = "config.yaml"
 
 
-def try_huggingface_direct(checkpoint: str):
+def main() -> int:
     from huggingface_hub import hf_hub_download
+    from terratorch.cli_tools import LightningInferenceModel
 
-    print(f"[path B] trying a direct HuggingFace Hub download: {checkpoint}")
-    # Checkpoint filenames can differ per repo, so ideally we'd check config.json/README
-    # first — but at the spike stage we only confirm that a download succeeds at all.
-    path = hf_hub_download(repo_id=checkpoint, filename="config.json")
-    print(f"  config.json downloaded successfully: {path}")
-    return path
+    cache_dir = config.REPO_ROOT / ".cache" / "prithvi_checkpoint"
+    print(f"Downloading {CONFIG_FILE} and {CHECKPOINT_FILE} from {CHECKPOINT_REPO}...")
+    config_path = hf_hub_download(repo_id=CHECKPOINT_REPO, filename=CONFIG_FILE, local_dir=cache_dir)
+    checkpoint_path = hf_hub_download(repo_id=CHECKPOINT_REPO, filename=CHECKPOINT_FILE, local_dir=cache_dir)
 
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--checkpoint", default=config.PRITHVI_CHECKPOINT_PRIMARY)
-    parser.add_argument("--fallback", default=config.PRITHVI_CHECKPOINT_FALLBACK)
-    args = parser.parse_args()
-
-    for checkpoint in (args.checkpoint, args.fallback):
-        print("=" * 60)
-        print(f"checkpoint: {checkpoint}")
-        try:
-            model = try_terratorch_registry(checkpoint)
-            n_params = sum(p.numel() for p in model.parameters())
-            print(f"  ✓ path A succeeded — parameter count: {n_params:,}")
-            return 0
-        except Exception as e:  # noqa: BLE001
-            print(f"  ✗ path A failed: {type(e).__name__}: {e}")
-
-        try:
-            try_huggingface_direct(checkpoint)
-            print("  ✓ path B succeeded (config file confirmed) — full weight loading still needs implementing")
-            return 0
-        except Exception as e:  # noqa: BLE001
-            print(f"  ✗ path B failed: {type(e).__name__}: {e}")
-
-    print("\nBoth checkpoints failed on both paths. Review the error messages to decide next steps")
-    print("(spec §3 fallback plan: Sentinel-2 optical assist / compare against the Clay model).")
-    return 1
+    print("Loading the full fine-tuned segmentation model (backbone + decoder + head)...")
+    lightning_model = LightningInferenceModel.from_config(config_path, checkpoint_path)
+    n_params = sum(p.numel() for p in lightning_model.model.parameters())
+    print(f"✓ Loaded successfully — parameter count: {n_params:,}")
+    print("This is the real sen1floods11 fine-tuned model, ready for inference.")
+    print("Next: scripts/05_build_s2_composite.py + scripts/prithvi_inference.py")
+    return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except Exception as e:  # noqa: BLE001
+        print(f"✗ Failed: {type(e).__name__}: {e}")
+        raise SystemExit(1)

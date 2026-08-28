@@ -16,6 +16,7 @@ python-dotenv>=1.0
 # ML / model inference
 torch>=2.4
 terratorch>=1.0
+einops>=0.8       # used directly by scripts/prithvi_inference.py (also a terratorch transitive dep)
 
 # Visualization / utilities
 matplotlib>=3.9
