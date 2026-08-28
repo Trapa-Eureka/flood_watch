@@ -21,6 +21,9 @@ torch>=2.4
 terratorch>=1.0
 einops>=0.8       # used directly by pipeline/inference/prithvi_inference.py (also a terratorch transitive dep)
 
+# Serverless GPU deployment (Week 2) — needs `modal setup` (browser OAuth) before use
+modal>=1.0
+
 # Visualization / utilities
 matplotlib>=3.9
 numpy>=1.26,<2.0
