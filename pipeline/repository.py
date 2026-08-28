@@ -163,3 +163,26 @@ def update_inference_run(run_id: str, status: str, finished_at: Optional[str] = 
     row = resp.json()[0]
     print(f"  inference_runs: {run_id} -> status={status}")
     return row
+
+
+# ---------------------------------------------------------------------------
+# flood_extents
+# ---------------------------------------------------------------------------
+
+def create_flood_extent(event_id: str, run_id: str, geom_wkt: str, area_km2: float,
+                         confidence_mean: Optional[float] = None,
+                         raster_storage_key: Optional[str] = None) -> dict:
+    """raster_storage_key is nullable (Week 2-7 migration) — R2 upload is a
+    separate step that may not have happened yet (or, right now, R2
+    credentials from Week 1-4 may not even be set), so this can be filled in
+    later with a follow-up PATCH once the raster is actually in R2."""
+    url = f"{config.SUPABASE_URL}/rest/v1/flood_extents"
+    body = {
+        "event_id": event_id, "run_id": run_id, "geom": geom_wkt, "area_km2": area_km2,
+        "confidence_mean": confidence_mean, "raster_storage_key": raster_storage_key,
+    }
+    resp = requests.post(url, headers=_headers(), json=body, timeout=30)
+    _check(resp, "flood_extents insert")
+    row = resp.json()[0]
+    print(f"  flood_extents: created (id={row['id']}, area_km2={area_km2:.4f})")
+    return row

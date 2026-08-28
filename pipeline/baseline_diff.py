@@ -109,7 +109,8 @@ def fetch_occurrence_on_grid(bbox, pad_ratio: float, target_transform, target_h:
 
 
 def permanent_water_from_occurrence(occurrence_on_target: np.ndarray,
-                                     threshold: float = PERMANENT_WATER_THRESHOLD, buffer_px: int = 0) -> np.ndarray:
+                                     threshold: float = PERMANENT_WATER_THRESHOLD,
+                                     buffer_px: int = DEFAULT_WATER_BUFFER_PX) -> np.ndarray:
     """threshold/buffer_px (Week 2-5, docs/design-notes.md): occurrence >= threshold
     is the base permanent-water call; buffer_px then dilates that mask by N
     pixels (30m each at JRC's native resolution) to absorb mixed-pixel edge
@@ -134,7 +135,8 @@ def permanent_water_from_occurrence(occurrence_on_target: np.ndarray,
 
 
 def fetch_permanent_water_mask(bbox, pad_ratio: float, target_transform, target_h: int, target_w: int, target_crs,
-                                threshold: float = PERMANENT_WATER_THRESHOLD, buffer_px: int = 0):
+                                threshold: float = PERMANENT_WATER_THRESHOLD,
+                                buffer_px: int = DEFAULT_WATER_BUFFER_PX):
     """Convenience wrapper: fetch_occurrence_on_grid + permanent_water_from_occurrence
     in one call — what scripts/CLIs that only need one (threshold, buffer_px)
     combination should use. Returns a boolean array, True = permanent water."""
