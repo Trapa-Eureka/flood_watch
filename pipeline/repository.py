@@ -1,5 +1,5 @@
-"""Thin data-access layer for the "business" tables (aois/events/scene_refs) —
-Week 1-8. Deliberately separate from pipeline/db.py, which only ever writes
+"""Thin data-access layer for the "business" tables (aois/events/scene_refs/
+inference_runs) — Week 1-8 + Week 2-6. Deliberately separate from pipeline/db.py, which only ever writes
 the insert-only pipeline_events audit log: these tables are mutable business
 data (an event's status changes, a scene_ref's storage_key fills in later),
 so they get ordinary CRUD-ish helpers instead of pipeline_events' append-only
@@ -118,4 +118,48 @@ def record_scene_ref(event_id: str, item, role: str, storage_key: Optional[str] 
     _check(resp, "scene_refs upsert")
     row = resp.json()[0]
     print(f"  scene_refs: {role} = {item.id} (id={row['id']}, storage_key={row['storage_key']})")
+    return row
+
+
+# ---------------------------------------------------------------------------
+# inference_runs
+# ---------------------------------------------------------------------------
+
+def create_inference_run(event_id: str, model: str, model_version: Optional[str] = None,
+                          input_scene_ids: Optional[list] = None, status: str = "running") -> dict:
+    """input_scene_ids is a plain list (STAC ids or scene_refs uuids — caller's
+    choice, this table just stores whatever jsonb it's given, see spec.md §6).
+    Default status='running': in this pipeline inference.run is invoked
+    synchronously and awaited (no separate job queue yet), so by the time
+    Python code exists to call this, inference has already started — 'pending'
+    would only apply to an async/queued design this project doesn't have."""
+    url = f"{config.SUPABASE_URL}/rest/v1/inference_runs"
+    body = {
+        "event_id": event_id, "model": model, "model_version": model_version,
+        "input_scene_ids": input_scene_ids or [], "status": status,
+    }
+    resp = requests.post(url, headers=_headers(), json=body, timeout=30)
+    _check(resp, "inference_runs insert")
+    row = resp.json()[0]
+    print(f"  inference_runs: created (id={row['id']}, model={model}, status={status})")
+    return row
+
+
+def update_inference_run(run_id: str, status: str, finished_at: Optional[str] = None,
+                          metrics: Optional[dict] = None) -> dict:
+    """finished_at defaults to "now" via Postgres's own now() if not passed —
+    simplest to just always pass it explicitly from the caller (it knows the
+    real completion time better than a second network round-trip would)."""
+    import datetime as _dt
+
+    url = f"{config.SUPABASE_URL}/rest/v1/inference_runs"
+    body = {
+        "status": status,
+        "finished_at": finished_at or _dt.datetime.now(_dt.timezone.utc).isoformat(),
+        "metrics": metrics or {},
+    }
+    resp = requests.patch(url, headers=_headers(), params={"id": f"eq.{run_id}"}, json=body, timeout=30)
+    _check(resp, "inference_runs update")
+    row = resp.json()[0]
+    print(f"  inference_runs: {run_id} -> status={status}")
     return row
