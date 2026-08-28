@@ -56,6 +56,13 @@ SENTINEL2_COLLECTION = "sentinel-2-l2a"
 PRITHVI_CHECKPOINT_PRIMARY = "ibm-nasa-geospatial/Prithvi-EO-2.0-300M-TL-Sen1Floods11"
 PRITHVI_CHECKPOINT_FALLBACK = "ibm-nasa-geospatial/Prithvi-EO-1.0-100M-sen1floods11"
 
+# --- Supabase (spec.md §5/§6 PostGIS DB) --------------------------------------
+# project created 2026-08-28 (Week 1-3, docs/design-notes.md), Singapore region.
+# URL/project ref aren't secrets (same reasoning as R2's account id below) —
+# only the DB password and anon/service_role keys live in .env.
+SUPABASE_PROJECT_REF = "xaljckiwksyjtasvjagg"
+SUPABASE_URL = f"https://{SUPABASE_PROJECT_REF}.supabase.co"
+
 # --- Cloudflare R2 (spec.md §5 storage) ---------------------------------------
 # Two buckets, not one, because access patterns differ: raw scenes are
 # backend-only (never served publicly — can always be re-fetched from CDSE for
