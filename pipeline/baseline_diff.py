@@ -38,7 +38,21 @@ CLOUD_MASKED_VALUE = 128
 WATER_VALUE = 255
 
 # occurrence >= this % (0-100) of the 1984-2024 record counts as "permanent water".
+# Week 2-5 tuning (docs/design-notes.md) tested lowering this and found it a worse
+# lever than DEFAULT_WATER_BUFFER_PX below — a lower global threshold reduces
+# false positives everywhere uniformly, including areas with no boundary-adjacency
+# reason to, so it risks suppressing genuine new-flood signal in areas that just
+# happen to have some historical flood recurrence. Left at 50 (unchanged).
 PERMANENT_WATER_THRESHOLD = 50
+
+# Dilate the permanent-water mask by this many 30m JRC pixels before diffing.
+# Week 2-5 finding: only ~17-30% of "new flood" pixels sit within 3px of known
+# permanent water (i.e., only a MINORITY is explained by the narrow-river mixed-
+# pixel hypothesis from A-4 — the majority is genuine signal or a different,
+# still-unexplained source, see docs/design-notes.md). A 1px buffer is a
+# conservative, well-justified partial fix (measured ~14-25% area reduction on
+# the two backtest sites) — NOT a claim that this fully resolves the issue.
+DEFAULT_WATER_BUFFER_PX = 1
 
 
 def jrc_tile_name(lon: float, lat: float) -> str:
@@ -50,10 +64,16 @@ def jrc_tile_name(lon: float, lat: float) -> str:
     return f"occurrence_{lon_str}_{lat_str}_v1_5_2024.tif"
 
 
-def fetch_permanent_water_mask(bbox, pad_ratio: float, target_transform, target_h: int, target_w: int, target_crs):
+def fetch_occurrence_on_grid(bbox, pad_ratio: float, target_transform, target_h: int, target_w: int, target_crs) -> np.ndarray:
     """Read JRC GSW occurrence for *bbox* directly off the remote server (no full
     download — GDAL's /vsicurl/ uses HTTP range requests) and warp it onto the
-    same grid as the prediction raster. Returns a boolean array, True = permanent water."""
+    same grid as the prediction raster. Returns a float32 array, 0-100 (occurrence %).
+
+    Split out from fetch_permanent_water_mask (Week 2-5) so a threshold/buffer
+    sweep (tools/jrc_threshold_tuning.py) can fetch the network data ONCE per
+    site and re-threshold it locally many times, instead of re-fetching for
+    every combination tested.
+    """
     import rasterio
     from rasterio.warp import reproject, Resampling
 
@@ -85,10 +105,41 @@ def fetch_permanent_water_mask(bbox, pad_ratio: float, target_transform, target_
         src_nodata=255,  # JRC uses 255 as nodata/no-observation in some products; harmless if unused
         dst_nodata=0,
     )
-    permanent_water = occurrence_on_target >= PERMANENT_WATER_THRESHOLD
+    return occurrence_on_target
+
+
+def permanent_water_from_occurrence(occurrence_on_target: np.ndarray,
+                                     threshold: float = PERMANENT_WATER_THRESHOLD, buffer_px: int = 0) -> np.ndarray:
+    """threshold/buffer_px (Week 2-5, docs/design-notes.md): occurrence >= threshold
+    is the base permanent-water call; buffer_px then dilates that mask by N
+    pixels (30m each at JRC's native resolution) to absorb mixed-pixel edge
+    effects around narrow rivers — a real 30m pixel straddling a riverbank
+    often averages to an occurrence *below* any reasonable threshold even
+    though the water there is genuinely permanent, which is what caused the
+    narrow-river false positives found in the A-4 backtest (Marikina, narrow,
+    vs. Cagayan, wide, which didn't show the problem).
+    """
+    permanent_water = occurrence_on_target >= threshold
+    pct_before = 100 * permanent_water.sum() / permanent_water.size
+
+    if buffer_px > 0:
+        from scipy.ndimage import binary_dilation
+
+        permanent_water = binary_dilation(permanent_water, iterations=buffer_px)
+
     pct = 100 * permanent_water.sum() / permanent_water.size
-    print(f"Permanent water (occurrence >= {PERMANENT_WATER_THRESHOLD}%): {pct:.1f}% of AOI")
+    buf_note = f", +{buffer_px}px buffer -> {pct:.1f}%" if buffer_px > 0 else ""
+    print(f"Permanent water (occurrence >= {threshold}%): {pct_before:.1f}% of AOI{buf_note}")
     return permanent_water
+
+
+def fetch_permanent_water_mask(bbox, pad_ratio: float, target_transform, target_h: int, target_w: int, target_crs,
+                                threshold: float = PERMANENT_WATER_THRESHOLD, buffer_px: int = 0):
+    """Convenience wrapper: fetch_occurrence_on_grid + permanent_water_from_occurrence
+    in one call — what scripts/CLIs that only need one (threshold, buffer_px)
+    combination should use. Returns a boolean array, True = permanent water."""
+    occurrence_on_target = fetch_occurrence_on_grid(bbox, pad_ratio, target_transform, target_h, target_w, target_crs)
+    return permanent_water_from_occurrence(occurrence_on_target, threshold=threshold, buffer_px=buffer_px)
 
 
 def main():
@@ -100,6 +151,15 @@ def main():
         "--bbox", type=float, nargs=4, default=None, metavar=("WEST", "SOUTH", "EAST", "NORTH"),
         help="must match the AOI actually used for --pred (this picks which JRC tile(s) to read — "
              "wrong bbox silently reads the wrong location's permanent-water data)",
+    )
+    parser.add_argument(
+        "--threshold", type=float, default=PERMANENT_WATER_THRESHOLD,
+        help="occurrence %% (0-100) that counts as permanent water (Week 2-5 tuning)",
+    )
+    parser.add_argument(
+        "--water-buffer-px", type=int, default=DEFAULT_WATER_BUFFER_PX,
+        help="dilate the permanent-water mask by N pixels (30m each) to absorb narrow-river "
+             "mixed-pixel edges (Week 2-5 tuning) — pass 0 to reproduce the original A-stage behavior",
     )
     args = parser.parse_args()
     bbox = tuple(args.bbox) if args.bbox else config.AOI_BBOX
@@ -113,7 +173,8 @@ def main():
         target_h, target_w = src.height, src.width
 
     permanent_water = fetch_permanent_water_mask(
-        bbox, args.pad_ratio, target_transform, target_h, target_w, target_crs
+        bbox, args.pad_ratio, target_transform, target_h, target_w, target_crs,
+        threshold=args.threshold, buffer_px=args.water_buffer_px,
     )
 
     is_flood_class = pred == WATER_VALUE

@@ -32,3 +32,4 @@ modal>=1.0
 matplotlib>=3.9
 numpy>=1.26,<2.0
 pillow>=10.4
+scipy>=1.13      # pipeline/baseline_diff.py's water-mask morphological dilation (Week 2-5)
