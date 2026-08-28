@@ -1,23 +1,23 @@
-# PH Flood Watch — 2-3일 기술검증(스파이크) 의존성
-# 스펙 §14 1단계: rasterio, GDAL, geopandas, pystac-client, torch, terratorch 설치 확인
+# PH Flood Watch — dependencies for the 2-3 day technical validation (spike)
+# Spec §14 step 1: confirm rasterio, GDAL, geopandas, pystac-client, torch, terratorch install
 
-# 지리공간 처리 (rasterio는 macOS wheel에 GDAL을 정적으로 번들 — 시스템 brew GDAL과 별개)
+# Geospatial processing (rasterio bundles GDAL statically in its macOS wheel — separate from system brew GDAL)
 rasterio>=1.4,<2.0
 geopandas>=1.0
 shapely>=2.0
 pyproj>=3.6
 rio-cogeo>=5.3
 
-# STAC 수집
+# STAC collection
 pystac-client>=0.8
 requests>=2.32
 python-dotenv>=1.0
 
-# ML / 모델 추론
+# ML / model inference
 torch>=2.4
 terratorch>=1.0
 
-# 시각화 / 유틸
+# Visualization / utilities
 matplotlib>=3.9
 numpy>=1.26,<2.0
 pillow>=10.4

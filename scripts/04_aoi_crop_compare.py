@@ -1,15 +1,19 @@
-"""스펙 §3 실제 목적: 마리키나 AOI로 크롭해서 전후 SAR 영상을 육안 대조.
+"""The actual point of spec §3: crop to the Marikina AOI and visually compare the
+before/after SAR imagery.
 
-원본 Sentinel-1 GRD는 아핀 변환이 아니라 GCP(지상기준점)로만 지리참조되어 있어
-(scripts/02_visualize_scene.py가 확인한 그대로), 정확한 재투영(gdalwarp -geoloc 등,
-스펙 §7 preprocess.run 몫)을 하기 전엔 bbox 크롭이 원칙적으로 안 된다.
+Raw Sentinel-1 GRD is georeferenced only via GCPs (ground control points), not an
+affine transform (as confirmed by scripts/02_visualize_scene.py) — so strictly
+speaking, a bbox crop isn't valid until proper reprojection (e.g. gdalwarp -geoloc,
+owned by spec §7's preprocess.run stage) has been done.
 
-이 스크립트는 그 정식 재투영 대신 GCP로부터 근사 아핀 변환을 추정(rasterio.transform.from_gcps)해서
-AOI 근처 픽셀 윈도우만 빠르게 잘라보는 **근사치**다 — SAR의 range/azimuth 왜곡을 보정하지 않으므로
-경계가 몇 픽셀~수십 픽셀 어긋날 수 있다. 스파이크 단계에서 "육안으로 신호가 보이는가"를 빨리
-확인하는 용도로만 쓰고, 정밀 비교는 실제 preprocess.run 구현 후 다시 할 것.
+Instead of that full reprojection, this script estimates an approximate affine
+transform from the GCPs (rasterio.transform.from_gcps) to quickly cut out a pixel
+window near the AOI — an **approximation** that does not correct for SAR
+range/azimuth distortion, so the boundary can be off by a few to a few dozen
+pixels. Use this only to quickly check "is there a visible signal" during the
+spike; redo the precise comparison once preprocess.run is actually implemented.
 
-사용:
+Usage:
   python scripts/04_aoi_crop_compare.py --baseline <tif> --post <tif>
 """
 import argparse
@@ -23,7 +27,8 @@ import config  # noqa: E402
 
 
 def crop_to_aoi_approx(tif_path: Path, bbox, pad_ratio: float = 0.15):
-    """GCP 기반 근사 아핀 변환으로 bbox 근처 윈도우를 읽는다. (src, array, approx_transform) 반환."""
+    """Read a window near bbox using a GCP-based approximate affine transform.
+    Returns (src, array, approx_transform)."""
     import rasterio
     from rasterio.transform import from_gcps
     from rasterio.windows import Window
@@ -31,7 +36,7 @@ def crop_to_aoi_approx(tif_path: Path, bbox, pad_ratio: float = 0.15):
     src = rasterio.open(tif_path)
     gcps, gcp_crs = src.gcps
     if not gcps:
-        raise RuntimeError(f"{tif_path.name}: GCP가 없어 근사 크롭 불가")
+        raise RuntimeError(f"{tif_path.name}: no GCPs, cannot do an approximate crop")
 
     approx_transform = from_gcps(gcps)
 
@@ -43,8 +48,9 @@ def crop_to_aoi_approx(tif_path: Path, bbox, pad_ratio: float = 0.15):
     south -= h * pad_ratio
     north += h * pad_ratio
 
-    # SAR 궤도 방향에 따라 transform의 행/열 진행 부호가 달라질 수 있어
-    # from_bounds()의 방향 가정을 못 믿는다 — 네 모서리를 직접 역변환해서 min/max로 윈도우를 구성.
+    # The sign of the transform's row/col progression can vary with SAR orbit
+    # direction, so we can't trust from_bounds()'s orientation assumptions —
+    # invert the four corners directly and build the window from their min/max.
     inv = ~approx_transform
     corners = [(west, south), (west, north), (east, south), (east, north)]
     cols, rows = zip(*(inv * (lon, lat) for lon, lat in corners))
@@ -55,17 +61,17 @@ def crop_to_aoi_approx(tif_path: Path, bbox, pad_ratio: float = 0.15):
         col_off=col_off, row_off=row_off,
         width=col_end - col_off, height=row_end - row_off,
     ).round_lengths().round_offsets()
-    # 이미지 범위 밖으로 나가면 클립
+    # Clip to the raster's actual extent
     window = window.intersection(Window(0, 0, src.width, src.height))
 
     if window.width <= 0 or window.height <= 0:
         raise RuntimeError(
-            f"{tif_path.name}: AOI가 이 씬의 GCP 범위 밖으로 계산됨 — "
-            f"근사 변환 오차이거나 씬이 AOI를 실제로 안 덮을 수 있음"
+            f"{tif_path.name}: computed AOI window falls outside this scene's GCP extent — "
+            f"either the approximate transform is off, or this scene doesn't actually cover the AOI"
         )
 
     arr = src.read(1, window=window)
-    print(f"{tif_path.name}: 크롭 윈도우 {window.width}x{window.height}px @ ({window.col_off},{window.row_off})")
+    print(f"{tif_path.name}: crop window {window.width}x{window.height}px @ ({window.col_off},{window.row_off})")
     return src, arr, approx_transform
 
 
@@ -87,11 +93,10 @@ def save_side_by_side(arr_a, arr_b, label_a, label_b, out_path: Path):
         ax.imshow(stretch(arr), cmap="gray")
         ax.set_title(label)
         ax.axis("off")
-    # matplotlib 기본 폰트(DejaVu Sans)가 한글 글리프가 없어 제목은 영문으로 고정.
     fig.suptitle("Marikina AOI approx crop — left: baseline(pre) / right: post_event")
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
-    print(f"비교 PNG 저장: {out_path}")
+    print(f"Saved comparison PNG: {out_path}")
 
 
 def main():
@@ -101,7 +106,7 @@ def main():
     parser.add_argument("--output", default=str(config.DATA_OUTPUT_DIR / "aoi_compare.png"))
     args = parser.parse_args()
 
-    print(f"AOI bbox(근사): {config.AOI_BBOX}")
+    print(f"AOI bbox (approx): {config.AOI_BBOX}")
 
     src_a, arr_a, _ = crop_to_aoi_approx(Path(args.baseline), config.AOI_BBOX)
     src_b, arr_b, _ = crop_to_aoi_approx(Path(args.post), config.AOI_BBOX)
