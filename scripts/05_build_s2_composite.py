@@ -174,7 +174,13 @@ def main():
     parser.add_argument("--output", required=True)
     parser.add_argument("--pad-ratio", type=float, default=0.0)
     parser.add_argument("--band-cache-dir", default=str(config.DATA_RAW_DIR / "s2_bands"))
+    parser.add_argument(
+        "--bbox", type=float, nargs=4, default=None, metavar=("WEST", "SOUTH", "EAST", "NORTH"),
+        help="AOI override, EPSG:4326. Defaults to config.AOI_BBOX (per the 2026-08-28 "
+             "'AOI is free-form per event' decision — see docs/design-notes.md).",
+    )
     args = parser.parse_args()
+    bbox = tuple(args.bbox) if args.bbox else config.AOI_BBOX
 
     item = fetch_item(args.item_id)
     print(f"Item: {item.id}  acquired={item.datetime}  cloud_cover={item.properties.get('eo:cloud_cover')}")
@@ -187,7 +193,7 @@ def main():
         print(f"Downloading {band_name} ({asset_key})...")
         band_paths[band_name] = download_band(item, asset_key, token, band_cache)
 
-    build_composite(band_paths, config.AOI_BBOX, args.pad_ratio, Path(args.output))
+    build_composite(band_paths, bbox, args.pad_ratio, Path(args.output))
     return 0
 
 

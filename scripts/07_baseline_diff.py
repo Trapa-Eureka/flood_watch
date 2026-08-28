@@ -98,7 +98,13 @@ def main():
     parser.add_argument("--pred", required=True, help="cloud-masked prediction from scripts/06_apply_cloud_mask.py")
     parser.add_argument("--output", required=True)
     parser.add_argument("--pad-ratio", type=float, default=0.05, help="must match what built the composite/pred")
+    parser.add_argument(
+        "--bbox", type=float, nargs=4, default=None, metavar=("WEST", "SOUTH", "EAST", "NORTH"),
+        help="must match the AOI actually used for --pred (this picks which JRC tile(s) to read — "
+             "wrong bbox silently reads the wrong location's permanent-water data)",
+    )
     args = parser.parse_args()
+    bbox = tuple(args.bbox) if args.bbox else config.AOI_BBOX
 
     import rasterio
 
@@ -109,7 +115,7 @@ def main():
         target_h, target_w = src.height, src.width
 
     permanent_water = fetch_permanent_water_mask(
-        config.AOI_BBOX, args.pad_ratio, target_transform, target_h, target_w, target_crs
+        bbox, args.pad_ratio, target_transform, target_h, target_w, target_crs
     )
 
     is_flood_class = pred == WATER_VALUE

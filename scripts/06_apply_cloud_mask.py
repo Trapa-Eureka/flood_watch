@@ -91,7 +91,12 @@ def main():
     parser.add_argument("--output", required=True)
     parser.add_argument("--pad-ratio", type=float, default=0.05, help="must match what built the composite/pred")
     parser.add_argument("--band-cache-dir", default=str(config.DATA_RAW_DIR / "s2_bands"))
+    parser.add_argument(
+        "--bbox", type=float, nargs=4, default=None, metavar=("WEST", "SOUTH", "EAST", "NORTH"),
+        help="must match whatever --bbox (or the config.AOI_BBOX default) built the composite/pred",
+    )
     args = parser.parse_args()
+    bbox = tuple(args.bbox) if args.bbox else config.AOI_BBOX
 
     item = s2_composite.fetch_item(args.item_id)
     band_cache = Path(args.band_cache_dir)
@@ -102,7 +107,7 @@ def main():
             f"item first (needed to reproduce the same target grid)."
         )
 
-    cloud_mask = build_cloud_mask(item, band_cache, ref_band_path, config.AOI_BBOX, args.pad_ratio)
+    cloud_mask = build_cloud_mask(item, band_cache, ref_band_path, bbox, args.pad_ratio)
     apply_mask(Path(args.pred), cloud_mask, Path(args.output))
     return 0
 
