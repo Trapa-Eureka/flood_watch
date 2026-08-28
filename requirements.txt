@@ -21,7 +21,11 @@ torch>=2.4
 terratorch>=1.0
 einops>=0.8       # used directly by pipeline/inference/prithvi_inference.py (also a terratorch transitive dep)
 
-# Serverless GPU deployment (Week 2) — needs `modal setup` (browser OAuth) before use
+# Serverless GPU deployment (Week 2) — needs `modal setup` (browser OAuth) before use.
+# NOTE: the actual Modal container image (pipeline/inference/modal_app.py) pins its
+# OWN deps separately (torch/terratorch/rasterio/etc run remotely on Modal's Linux
+# containers, not this local Python env) — this line is only for the local `modal`
+# CLI/SDK used to deploy/invoke it.
 modal>=1.0
 
 # Visualization / utilities
