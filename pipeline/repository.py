@@ -1,0 +1,121 @@
+"""Thin data-access layer for the "business" tables (aois/events/scene_refs) —
+Week 1-8. Deliberately separate from pipeline/db.py, which only ever writes
+the insert-only pipeline_events audit log: these tables are mutable business
+data (an event's status changes, a scene_ref's storage_key fills in later),
+so they get ordinary CRUD-ish helpers instead of pipeline_events' append-only
+contract.
+
+Same reasoning as pipeline/db.py for *how* it talks to Postgres: plain
+`requests` against Supabase's PostgREST REST API with the service_role key
+(bypasses RLS — this is backend-only code), not supabase-py/psycopg2.
+"""
+import os
+from typing import Optional
+
+import requests
+
+from pipeline import config
+
+from dotenv import load_dotenv  # noqa: E402
+
+load_dotenv()
+
+
+def _headers(prefer: str = "return=representation") -> dict:
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    if not key:
+        raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY not found in .env — see .env.example.")
+    return {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "Prefer": prefer,
+    }
+
+
+def _bbox_to_wkt_polygon(bbox) -> str:
+    west, south, east, north = bbox
+    return (
+        f"POLYGON(({west} {south}, {east} {south}, {east} {north}, "
+        f"{west} {north}, {west} {south}))"
+    )
+
+
+def _check(resp: requests.Response, what: str):
+    if resp.status_code >= 400:
+        raise RuntimeError(f"{what} failed ({resp.status_code}): {resp.text}")
+
+
+# ---------------------------------------------------------------------------
+# aois
+# ---------------------------------------------------------------------------
+
+def get_or_create_aoi(name: str, kind: str, bbox, watch_priority: int = 0) -> dict:
+    """Idempotent by name (aois has no unique constraint on it, but this
+    script is expected to be re-run during Week 1 testing/debugging — no
+    reason to accumulate duplicate 'Marikina River Basin' rows)."""
+    url = f"{config.SUPABASE_URL}/rest/v1/aois"
+    existing = requests.get(url, headers=_headers(), params={"name": f"eq.{name}", "select": "*"}, timeout=30)
+    _check(existing, "aois lookup")
+    rows = existing.json()
+    if rows:
+        print(f"  aois: found existing {name!r} (id={rows[0]['id']})")
+        return rows[0]
+
+    body = {"name": name, "kind": kind, "geom": _bbox_to_wkt_polygon(bbox), "watch_priority": watch_priority}
+    resp = requests.post(url, headers=_headers(), json=body, timeout=30)
+    _check(resp, "aois insert")
+    row = resp.json()[0]
+    print(f"  aois: created {name!r} (id={row['id']})")
+    return row
+
+
+# ---------------------------------------------------------------------------
+# events
+# ---------------------------------------------------------------------------
+
+def create_event(aoi_id: str, name: str, kind: str, pre_event_date: str,
+                  post_event_date: Optional[str] = None, status: str = "registered") -> dict:
+    url = f"{config.SUPABASE_URL}/rest/v1/events"
+    body = {
+        "aoi_id": aoi_id, "name": name, "kind": kind,
+        "pre_event_date": pre_event_date, "post_event_date": post_event_date, "status": status,
+    }
+    resp = requests.post(url, headers=_headers(), json=body, timeout=30)
+    _check(resp, "events insert")
+    row = resp.json()[0]
+    print(f"  events: created {name!r} (id={row['id']}, status={row['status']})")
+    return row
+
+
+def update_event_status(event_id: str, status: str) -> dict:
+    url = f"{config.SUPABASE_URL}/rest/v1/events"
+    resp = requests.patch(url, headers=_headers(), params={"id": f"eq.{event_id}"}, json={"status": status}, timeout=30)
+    _check(resp, "events status update")
+    row = resp.json()[0]
+    print(f"  events: {event_id} -> status={status}")
+    return row
+
+
+# ---------------------------------------------------------------------------
+# scene_refs
+# ---------------------------------------------------------------------------
+
+def record_scene_ref(event_id: str, item, role: str, storage_key: Optional[str] = None) -> dict:
+    """Record a resolved STAC item against an event. Idempotent on
+    (event_id, stac_id) — the schema's own unique constraint — a re-run that
+    hits an existing row updates storage_key instead of erroring."""
+    url = f"{config.SUPABASE_URL}/rest/v1/scene_refs"
+    body = {
+        "event_id": event_id, "stac_id": item.id, "collection": config.SENTINEL2_COLLECTION,
+        "role": role, "acquired_at": str(item.datetime), "footprint": _bbox_to_wkt_polygon(item.bbox),
+        "storage_key": storage_key,
+    }
+    resp = requests.post(
+        url, headers={**_headers(), "Prefer": "return=representation,resolution=merge-duplicates"},
+        params={"on_conflict": "event_id,stac_id"}, json=body, timeout=30,
+    )
+    _check(resp, "scene_refs upsert")
+    row = resp.json()[0]
+    print(f"  scene_refs: {role} = {item.id} (id={row['id']}, storage_key={row['storage_key']})")
+    return row
