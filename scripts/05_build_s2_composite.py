@@ -98,14 +98,17 @@ def download_band(item, band_key: str, token: str, out_dir: Path) -> Path:
     return out_path
 
 
-def build_composite(band_paths: dict, bbox, pad_ratio: float, out_path: Path):
+def compute_aoi_window(ref_band_path: Path, bbox, pad_ratio: float):
+    """Compute the target grid (transform, height, width, crs) for an AOI bbox,
+    anchored to *ref_band_path*'s own resolution/grid. Shared by the composite
+    builder and scripts/06_apply_cloud_mask.py so both align to the identical
+    pixel grid — pass the same ref band, bbox, and pad_ratio in both places.
+    """
     import rasterio
     from rasterio.warp import transform_bounds
     from rasterio.windows import from_bounds
-    from rasterio.enums import Resampling
 
-    # Use the 10m BLUE band to define the target grid (highest resolution we have).
-    with rasterio.open(band_paths["BLUE"]) as ref:
+    with rasterio.open(ref_band_path) as ref:
         target_crs = ref.crs
         west, south, east, north = bbox
         w, h = east - west, north - south
@@ -116,23 +119,43 @@ def build_composite(band_paths: dict, bbox, pad_ratio: float, out_path: Path):
         window = window.intersection(rasterio.windows.Window(0, 0, ref.width, ref.height))
         target_transform = ref.window_transform(window)
         target_h, target_w = int(window.height), int(window.width)
+    return target_transform, target_h, target_w, target_crs
+
+
+def read_band_at_target(band_path: Path, target_transform, target_h: int, target_w: int, resampling):
+    """Read *band_path* resampled onto the (target_transform, target_h, target_w) grid,
+    regardless of the band's own native resolution/grid offset."""
+    import rasterio
+    from rasterio.windows import from_bounds
+
+    with rasterio.open(band_path) as src:
+        corner_a = target_transform * (0, 0)
+        corner_b = target_transform * (target_w, target_h)
+        win = from_bounds(
+            min(corner_a[0], corner_b[0]), min(corner_a[1], corner_b[1]),
+            max(corner_a[0], corner_b[0]), max(corner_a[1], corner_b[1]),
+            transform=src.transform,
+        )
+        return src.read(1, window=win, out_shape=(target_h, target_w), resampling=resampling)
+
+
+def build_composite(band_paths: dict, bbox, pad_ratio: float, out_path: Path):
+    from rasterio.enums import Resampling
+
+    # Use the 10m BLUE band to define the target grid (highest resolution we have).
+    target_transform, target_h, target_w, target_crs = compute_aoi_window(
+        band_paths["BLUE"], bbox, pad_ratio
+    )
 
     stack = np.zeros((len(BAND_ORDER), target_h, target_w), dtype="uint16")
     for i, band_name in enumerate(BAND_ORDER):
-        with rasterio.open(band_paths[band_name]) as src:
-            # 20m bands are read at the 10m target shape directly (rasterio resamples
-            # while reading, using the appropriate window in *this file's own* grid).
-            src_bounds = target_transform * (0, 0), target_transform * (target_w, target_h)
-            win = rasterio.windows.from_bounds(
-                min(src_bounds[0][0], src_bounds[1][0]), min(src_bounds[0][1], src_bounds[1][1]),
-                max(src_bounds[0][0], src_bounds[1][0]), max(src_bounds[0][1], src_bounds[1][1]),
-                transform=src.transform,
-            )
-            data = src.read(
-                1, window=win, out_shape=(target_h, target_w), resampling=Resampling.bilinear,
-            )
-            stack[i] = data
+        # 20m bands are resampled (bilinear) onto the shared 10m target grid.
+        stack[i] = read_band_at_target(
+            band_paths[band_name], target_transform, target_h, target_w, Resampling.bilinear
+        )
         print(f"  stacked {band_name} ({band_paths[band_name].name})")
+
+    import rasterio
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with rasterio.open(
