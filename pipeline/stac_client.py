@@ -219,15 +219,12 @@ def fetch_best_s2_scenes(bbox, pre_start, pre_end, post_start, post_end,
 def download_scene_bands(item, band_cache_dir=None) -> dict:
     """Download the winning scene's 6 model bands (spec.md §7 scenes.fetch —
     the SCL band is usually already cached from local_cloud_cover_pct's check).
-    Delegates to preprocess.s2_composite so both places agree on file layout."""
+    Thin wrapper around preprocess.s2_composite.download_all_bands (Week 1-6:
+    that's now the one place that knows "the 6 bands", not two copies)."""
     from pipeline.preprocess import s2_composite
 
     band_cache_dir = Path(band_cache_dir) if band_cache_dir else config.DATA_RAW_DIR / "s2_bands"
-    token = s2_composite.get_access_token()
-    return {
-        band_name: s2_composite.download_band(item, asset_key, token, band_cache_dir)
-        for band_name, asset_key in s2_composite.BAND_ASSET_MAP.items()
-    }
+    return s2_composite.download_all_bands(item, band_cache_dir)
 
 
 def upload_raw_scene_to_r2(item, band_paths: dict, bucket: str | None = None) -> dict:

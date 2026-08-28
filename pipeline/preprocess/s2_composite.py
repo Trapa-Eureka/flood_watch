@@ -137,6 +137,39 @@ def read_band_at_target(band_path: Path, target_transform, target_h: int, target
         return src.read(1, window=win, out_shape=(target_h, target_w), resampling=resampling)
 
 
+def download_all_bands(item, band_cache_dir: Path) -> dict:
+    """Download all 6 model bands for *item* (+ caches to *band_cache_dir*).
+    Shared by the CLI below and pipeline/stac_client.py's download_scene_bands
+    — one place that knows "the 6 bands" instead of two copies drifting apart."""
+    band_cache_dir = Path(band_cache_dir)
+    token = get_access_token()
+    band_paths = {}
+    for band_name, asset_key in BAND_ASSET_MAP.items():
+        print(f"Downloading {band_name} ({asset_key})...")
+        band_paths[band_name] = download_band(item, asset_key, token, band_cache_dir)
+    return band_paths
+
+
+def preprocess_scene(item, bbox, pad_ratio: float = 0.0, band_cache_dir: Path = None, out_path: Path = None) -> dict:
+    """spec.md §7 preprocess.run (composite-building half) as a real service
+    function: given a STAC Item already resolved by pipeline.stac_client (no
+    redundant re-search — the CLI below still takes a bare --item-id and looks
+    it up, but callers that already hold the Item from fetch_best_s2_scenes
+    should call this directly), download the 6 bands and build the composite.
+
+    Returns {"composite_path", "band_paths"} — band_paths is handed straight
+    to cloud_mask.mask_prediction() later so it never re-derives which files
+    belong to this item.
+    """
+    band_cache_dir = Path(band_cache_dir) if band_cache_dir else config.DATA_RAW_DIR / "s2_bands"
+    out_path = Path(out_path) if out_path else config.DATA_OUTPUT_DIR / f"{item.id}_composite.tif"
+
+    print(f"Item: {item.id}  acquired={item.datetime}  cloud_cover={item.properties.get('eo:cloud_cover')}")
+    band_paths = download_all_bands(item, band_cache_dir)
+    build_composite(band_paths, bbox, pad_ratio, out_path)
+    return {"composite_path": out_path, "band_paths": band_paths}
+
+
 def build_composite(band_paths: dict, bbox, pad_ratio: float, out_path: Path):
     from rasterio.enums import Resampling
 
@@ -181,17 +214,7 @@ def main():
     bbox = tuple(args.bbox) if args.bbox else config.AOI_BBOX
 
     item = fetch_item(args.item_id)
-    print(f"Item: {item.id}  acquired={item.datetime}  cloud_cover={item.properties.get('eo:cloud_cover')}")
-
-    token = get_access_token()
-    band_cache = Path(args.band_cache_dir)
-
-    band_paths = {}
-    for band_name, asset_key in BAND_ASSET_MAP.items():
-        print(f"Downloading {band_name} ({asset_key})...")
-        band_paths[band_name] = download_band(item, asset_key, token, band_cache)
-
-    build_composite(band_paths, bbox, args.pad_ratio, Path(args.output))
+    preprocess_scene(item, bbox, args.pad_ratio, Path(args.band_cache_dir), Path(args.output))
     return 0
 
 

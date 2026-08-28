@@ -54,6 +54,34 @@ def build_cloud_mask(item, band_cache: Path, ref_band_path: Path, bbox, pad_rati
     return cloud_mask
 
 
+def mask_prediction(item, pred_path: Path, bbox, pad_ratio: float = 0.05,
+                     band_cache_dir: Path = None, out_path: Path = None) -> Path:
+    """spec.md §7 preprocess.run (cloud-mask half) as a real service function:
+    given a STAC Item (already resolved, no redundant re-search — same pattern
+    as s2_composite.preprocess_scene) and a finished inference.run prediction,
+    apply the SCL cloud mask and write the masked result.
+
+    Unlike the CLI below (which historically required the composite step to
+    have already downloaded B02_10m and would just raise if it hadn't),
+    this ensures the reference band exists — downloading it if needed — so a
+    caller that already has band_paths from preprocess_scene() doesn't have to
+    care about this implementation detail, and a caller that only has the item
+    still gets a working call instead of an instruction to go run a different
+    command first.
+    """
+    band_cache_dir = Path(band_cache_dir) if band_cache_dir else config.DATA_RAW_DIR / "s2_bands"
+    out_path = Path(out_path) if out_path else config.DATA_OUTPUT_DIR / f"{item.id}_pred_cloudmasked.tif"
+
+    ref_band_path = band_cache_dir / f"{item.id}_B02_10m.jp2"
+    if not ref_band_path.exists():
+        token = s2_composite.get_access_token()
+        ref_band_path = s2_composite.download_band(item, "B02_10m", token, band_cache_dir)
+
+    mask = build_cloud_mask(item, band_cache_dir, ref_band_path, bbox, pad_ratio)
+    apply_mask(Path(pred_path), mask, out_path)
+    return out_path
+
+
 def apply_mask(pred_path: Path, cloud_mask: np.ndarray, out_path: Path):
     import rasterio
 
@@ -95,16 +123,7 @@ def main():
     bbox = tuple(args.bbox) if args.bbox else config.AOI_BBOX
 
     item = s2_composite.fetch_item(args.item_id)
-    band_cache = Path(args.band_cache_dir)
-    ref_band_path = band_cache / f"{item.id}_B02_10m.jp2"
-    if not ref_band_path.exists():
-        raise RuntimeError(
-            f"{ref_band_path} not found — run `python -m pipeline.preprocess.s2_composite` for this "
-            f"item first (needed to reproduce the same target grid)."
-        )
-
-    cloud_mask = build_cloud_mask(item, band_cache, ref_band_path, bbox, args.pad_ratio)
-    apply_mask(Path(args.pred), cloud_mask, Path(args.output))
+    mask_prediction(item, Path(args.pred), bbox, args.pad_ratio, Path(args.band_cache_dir), Path(args.output))
     return 0
 
 
