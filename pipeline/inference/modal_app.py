@@ -55,6 +55,8 @@ inference_image = (
 class PrithviInference:
     @modal.enter()
     def load(self):
+        import time
+
         from huggingface_hub import hf_hub_download
         from terratorch.cli_tools import LightningInferenceModel
         import yaml
@@ -68,6 +70,16 @@ class PrithviInference:
         with open(config_path) as f:
             self.config_dict = yaml.safe_load(f)
         self.img_size = 512  # sen1floods11 training tile size — see prithvi_inference.py
+        self._loaded_at = time.time()  # Week 2-4: lets loaded_at() tell warm vs cold containers apart
+
+    @modal.method()
+    def loaded_at(self) -> float:
+        """Cheap probe (no GPU compute) — Week 2-4 cost/coldstart measurement
+        calls this to check whether two calls hit the same warm container
+        (same timestamp) or two different ones (a fresh cold start happened,
+        different timestamp) without paying for a full inference run just to
+        find out."""
+        return self._loaded_at
 
     @modal.method()
     def run(self, composite_bytes: bytes, input_indices=None) -> bytes:
