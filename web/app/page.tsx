@@ -30,27 +30,39 @@ type AdminBoundaryRef = { name: string; level: string } | null;
 // layer anywhere (see Week4-5's original scope decision), so a short-range
 // nowcast frame — which LibreWXR does offer, unlike RainViewer's free tier —
 // is deliberately left unused.
-async function fetchRainfallLayer(): Promise<RainfallLayer> {
+// 2026-08-30: found live that a user's home-page load can hit this right as
+// this same machine's Python pipeline is mid-download of a 900MB+ Sentinel-2
+// composite (this is a single dev box serving both the Next app and the
+// pipeline) — under that local network contention a 5s timeout genuinely
+// wasn't enough and the whole rainfall section silently vanished with zero
+// indication why. One retry with a longer timeout, not a longer single
+// timeout, because a transient stall is more likely to clear in the time
+// between two attempts than to still be blocking a single longer wait.
+async function fetchRainfallLayer(attempt = 1): Promise<RainfallLayer> {
   try {
     const res = await fetch("https://api.librewxr.net/public/weather-maps.json", {
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(8000),
       cache: "no-store",
     });
-    if (!res.ok) return null;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const past = data?.radar?.past;
-    if (!Array.isArray(past) || past.length === 0) return null;
+    if (!Array.isArray(past) || past.length === 0) throw new Error("no radar.past frames in response");
     const latest = past[past.length - 1];
     return {
       tileUrlTemplate: `${data.host}${latest.path}/512/{z}/{x}/{y}/2/1_1.png`,
       frameTime: latest.time,
       maxZoom: 12,
     };
-  } catch {
-    // network hiccup / API down — omit the layer rather than block the page
-    // or show something stale as if it were current (same convention as
-    // every other external-service failure in this project: R2 upload,
-    // style-load retry, etc.).
+  } catch (err) {
+    if (attempt < 2) return fetchRainfallLayer(attempt + 1);
+    // Genuinely exhausted retries — omit the layer rather than block the
+    // page or show something stale as if it were current (same convention
+    // as every other external-service failure in this project: R2 upload,
+    // style-load retry, etc.). HomeDashboardMap shows an honest
+    // "unavailable" note for this rather than silently having no trace of
+    // the section at all.
+    console.error("fetchRainfallLayer: giving up after 2 attempts —", err);
     return null;
   }
 }

@@ -142,7 +142,26 @@ export default function HomeDashboardMap({
   const [regionStats, setRegionStats] = useState<RegionStat[] | null>(null);
   const [showOverlays, setShowOverlays] = useState(true);
   const [showRainfall, setShowRainfall] = useState(true);
+  // 2026-08-30: the server-side fetch in page.tsx succeeding proves nothing
+  // about whether THIS browser can actually load the tile images — those are
+  // fetched client-side, directly by the user's own browser, to
+  // api.librewxr.net. Reported live: text panel showed real data, but no
+  // colored overlay ever painted — exactly the signature of a client-side ad
+  // blocker / privacy extension / network filter blocking that specific
+  // domain while the server-side request (a different network path
+  // entirely) goes through fine. This is a direct canary for that: a plain
+  // client-side fetch to the same host, independent of MapLibre's own tile
+  // loading, so a failure here is unambiguous evidence of client-side
+  // blocking rather than a MapLibre rendering bug.
+  const [clientRainfallBlocked, setClientRainfallBlocked] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!rainfall) return;
+    fetch("https://api.librewxr.net/public/weather-maps.json", { mode: "cors", cache: "no-store" }).catch(() => {
+      setClientRainfallBlocked(true);
+    });
+  }, [rainfall]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -205,20 +224,12 @@ export default function HomeDashboardMap({
       });
     });
 
-    // Geolocation is progressive enhancement only — PH-wide default view
-    // (createBaseMap's PH_CENTER/PH_ZOOM) stays if denied, unavailable, or
-    // slow; nothing here blocks the initial render on a permission prompt.
-    if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          map.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 11, duration: 1500 });
-        },
-        () => {
-          // denied / unavailable / timed out — silently keep the PH-wide default, not an error state
-        },
-        { timeout: 8000, maximumAge: 300000 },
-      );
-    }
+    // 2026-08-30: deliberately NOT using navigator.geolocation here — user
+    // feedback was explicit that a location-permission prompt on load is
+    // unwanted, full stop (not "make the denial state clearer", an earlier
+    // misreading this session corrected). The PH-wide default view is the
+    // only initial view now; the region/barangay search box is the intended
+    // way to get to a specific area, not a browser permission popup.
 
     return () => {
       cleanup();
@@ -479,11 +490,16 @@ export default function HomeDashboardMap({
         )}
       </div>
 
-      {/* legend + layer toggles — bottom-right */}
-      {(overlays.length > 0 || rainfall) && (
-        <div style={{ ...glassPanel, bottom: 12, right: 12, padding: "12px 14px", fontSize: 11, width: 220 }}>
-          {rainfall && (
-            <div style={{ marginBottom: overlays.length > 0 ? 12 : 0, paddingBottom: overlays.length > 0 ? 12 : 0, borderBottom: overlays.length > 0 ? "1px solid rgba(15,23,42,0.08)" : "none" }}>
+      {/* legend + layer toggles — bottom-right. Always shown (not gated on
+          overlays.length>0 || rainfall) so a rainfall fetch failure still
+          gets an honest "unavailable" line here instead of this whole panel
+          — and any explanation of why — just vanishing (found live 2026-08-30:
+          a silent LibreWXR fetch failure looked indistinguishable from a
+          broken feature). */}
+      <div style={{ ...glassPanel, bottom: 12, right: 12, padding: "12px 14px", fontSize: 11, width: 220 }}>
+        <div style={{ marginBottom: overlays.length > 0 ? 12 : 0, paddingBottom: overlays.length > 0 ? 12 : 0, borderBottom: overlays.length > 0 ? "1px solid rgba(15,23,42,0.08)" : "none" }}>
+          {rainfall ? (
+            <>
               <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", color: "#111", fontWeight: 600, fontSize: 12 }}>
                 <ToggleSwitch checked={showRainfall} onChange={setShowRainfall} />
                 Current rainfall
@@ -500,9 +516,24 @@ export default function HomeDashboardMap({
                   Saying so here beats implying precision the data doesn't
                   have. */}
               <div style={{ color: "#9ca3af", marginTop: 2 }}>~1km resolution, not barangay-precise</div>
-            </div>
+              {clientRainfallBlocked && (
+                <div style={{ color: "#b45309", marginTop: 6, fontWeight: 600 }}>
+                  Your browser couldn&apos;t reach librewxr.net directly — an ad blocker or privacy extension may be blocking it. Data loaded server-side fine; try allow-listing this site.
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div style={{ color: "#111", fontWeight: 600, fontSize: 12 }}>Current rainfall</div>
+              {/* Real, not a guess: page.tsx's fetchRainfallLayer() retried
+                  once and still failed (LibreWXR is a small single-maintainer
+                  service with no SLA, see design-notes.md) — say so instead
+                  of leaving no trace this section ever existed. */}
+              <div style={{ color: "#9ca3af", marginTop: 4 }}>Unavailable right now — reload to retry.</div>
+            </>
           )}
-          {overlays.length > 0 && (
+        </div>
+        {overlays.length > 0 && (
             <>
               <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, cursor: "pointer", color: "#111", fontWeight: 600, fontSize: 12 }}>
                 <ToggleSwitch checked={showOverlays} onChange={setShowOverlays} />
@@ -519,7 +550,6 @@ export default function HomeDashboardMap({
             </>
           )}
         </div>
-      )}
     </>
   );
 }
