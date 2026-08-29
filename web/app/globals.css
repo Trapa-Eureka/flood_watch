@@ -1,0 +1,28 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+}
+
+/* Full-viewport map (the "/" home page, MapView.tsx). `fixed` rather than
+   `absolute`+body-overflow:hidden (Week 4-1's original approach) — Week 4-2
+   added the /admin page, a normal scrolling document, and a global
+   `overflow:hidden` on body would have broken that page's scroll entirely.
+   `position: fixed` pins this to the viewport on its own, independent of
+   body's scroll behavior, so each page can just be itself. */
+#map {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* maplibre-gl's own CSS (imported in MapView.tsx) supplies control/popup
+   styling — nothing to override yet at scaffold stage. */
