@@ -33,3 +33,8 @@ matplotlib>=3.9
 numpy>=1.26,<2.0
 pillow>=10.4
 scipy>=1.13      # pipeline/baseline_diff.py's water-mask morphological dilation (Week 2-5)
+
+# Remote GeoParquet bbox-pushdown queries — pipeline/buildings.py (Week 3-4), reads
+# VIDA's PH building-footprints GeoParquet (4.8GB) without downloading it, same
+# "remote windowed read" idea as JRC's /vsicurl/ but via Parquet row-group stats.
+duckdb>=1.5
