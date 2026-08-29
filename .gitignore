@@ -107,6 +107,7 @@ node_modules/
 .turbo/
 npm-debug.log*
 yarn-error.log*
+*.tsbuildinfo
 pnpm-debug.log*
 
 # ============================================================

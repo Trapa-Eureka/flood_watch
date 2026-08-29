@@ -14,6 +14,7 @@ upload_raw_scene_to_r2 exactly — an upload-only function has no honest
 that and degrades gracefully, matching how every other R2-touching call site
 in this project has handled it.
 """
+import json
 import os
 from pathlib import Path
 from typing import Optional
@@ -86,6 +87,30 @@ def build_rgb_cog(composite_path, dst_path) -> Path:
     return dst_path
 
 
+PREVIEW_MAX_DIM = 1600  # px — a slider doesn't need full sensor resolution; caps file size for web loading
+
+
+def build_rgb_preview_jpeg(composite_path, dst_path) -> Path:
+    """Plain JPEG twin of build_rgb_cog's output — browsers can't decode a
+    GeoTIFF (even a JPEG-compressed COG) in an <img> tag, and the Week 4-3
+    before/after slider just needs a displayable image, not a georeferenced
+    layer (that's Week 4-4's flood-overlay map, a different use case).
+    Reuses the exact same RGB extraction/stretch as build_rgb_cog. First
+    attempt saved a full-resolution PNG (~13.5MB each, e.g. for the 2636x2677
+    Marikina-basin composite) — far too heavy for a browser slider to load
+    quickly, so this downscales to PREVIEW_MAX_DIM and uses JPEG (same
+    lossy-is-fine reasoning as build_rgb_cog's own JPEG COG profile)."""
+    from PIL import Image
+
+    rgb, _transform, _crs = _rgb_uint8_from_composite(composite_path)
+    dst_path = Path(dst_path)
+    dst_path.parent.mkdir(parents=True, exist_ok=True)
+    img = Image.fromarray(np.transpose(rgb, (1, 2, 0)))
+    img.thumbnail((PREVIEW_MAX_DIM, PREVIEW_MAX_DIM), Image.LANCZOS)
+    img.save(dst_path, format="JPEG", quality=85)
+    return dst_path
+
+
 def build_single_band_cog(raster_path, dst_path) -> Path:
     """COG for the flood overlay raster (or any single-band analysis raster) —
     lossless (DEFLATE), unlike build_rgb_cog: this holds WATER_VALUE/
@@ -98,6 +123,63 @@ def build_single_band_cog(raster_path, dst_path) -> Path:
     profile = cog_profiles.get("deflate")
     cog_translate(str(raster_path), dst_path, profile, add_mask=True, web_optimized=True, quiet=True)
     return dst_path
+
+
+# Class-code -> RGBA color for the flood overlay quicklook (Week 4-4). Values
+# match pipeline/baseline_diff.py's WATER_VALUE/CLOUD_MASKED_VALUE/180/0
+# convention exactly (see that module's save() print line). 0 (dry land) is
+# fully transparent so the basemap shows through everywhere the model didn't
+# flag anything — this is meant to sit ON TOP of a real basemap as a MapLibre
+# raster layer, not stand alone. New flood is red (not blue) specifically so
+# it doesn't visually merge into the also-present permanent-water blue.
+FLOOD_CLASS_COLORS = {
+    0: (0, 0, 0, 0),  # dry land / background
+    128: (140, 140, 140, 110),  # cloud-masked — "unknown", deliberately not "flooded"
+    180: (49, 109, 204, 150),  # pre-existing/permanent water (JRC baseline)
+    255: (217, 45, 32, 210),  # new flood — the headline class
+}
+
+
+def build_flood_overlay_png(flood_cog_path, dst_path) -> dict:
+    """Browser-displayable RGBA PNG twin of the flood_overlay COG — same
+    reasoning as build_rgb_preview_jpeg: a MapLibre `image` source (or a
+    plain <img>) can't decode a GeoTIFF, not even a COG. Colorized by class
+    code (FLOOD_CLASS_COLORS) with alpha=0 for dry land.
+
+    Also returns the raster's own corner coordinates in WGS84, because
+    MapLibre's `image` source places the image by 4 lon/lat corners, not a
+    CRS. build_single_band_cog's web_optimized=True already reprojected the
+    source to EPSG:3857 (confirmed via rasterio inspection — Web Mercator is
+    a non-rotated grid relative to lon/lat), so a plain bounds reprojection
+    is exact; no per-corner rotation math is needed here.
+    """
+    import rasterio
+    from rasterio.warp import transform_bounds
+    from PIL import Image
+
+    with rasterio.open(flood_cog_path) as src:
+        data = src.read(1)
+        west, south, east, north = transform_bounds(src.crs, "EPSG:4326", *src.bounds)
+
+    rgba = np.zeros((*data.shape, 4), dtype="uint8")
+    for value, color in FLOOD_CLASS_COLORS.items():
+        rgba[data == value] = color
+
+    img = Image.fromarray(rgba, mode="RGBA")
+    # NEAREST, not LANCZOS (unlike build_rgb_preview_jpeg's photo downscale):
+    # this is classified data rendered as flat color blocks, not a photo — a
+    # smooth resample would blend "new flood red" into "transparent" at every
+    # class boundary and paint a translucent red fringe around every edge.
+    img.thumbnail((PREVIEW_MAX_DIM, PREVIEW_MAX_DIM), Image.NEAREST)
+
+    dst_path = Path(dst_path)
+    dst_path.parent.mkdir(parents=True, exist_ok=True)
+    img.save(dst_path, format="PNG")
+
+    # MapLibre `image` source coordinate order: top-left, top-right,
+    # bottom-right, bottom-left (each [lon, lat]).
+    bounds_wgs84 = [[west, north], [east, north], [east, south], [west, south]]
+    return {"path": dst_path, "bounds_wgs84": bounds_wgs84}
 
 
 def upload_to_r2(local_path, key: str, bucket: Optional[str] = None) -> str:
@@ -157,5 +239,31 @@ def publish_event_tiles(event_id: str, pre_composite_path=None, post_composite_p
             print(f"  tiles: {label} R2 upload skipped ({e})")
 
         results[label] = {"local_path": str(dst_path), "r2_key": r2_key}
+
+    # Browser-displayable JPEG twins (Week 4-3) — only for pre/post RGB, not
+    # the flood overlay (that's class-code data for a map layer, Week 4-4's
+    # concern, not a picture for the slider). Same local-only / R2-pending
+    # situation as the COGs above — no R2 upload attempted for these yet
+    # either since there's nowhere real to put them.
+    for label, src_path in (("pre", pre_composite_path), ("post", post_composite_path)):
+        if src_path is None or results.get(label) is None:
+            continue
+        jpeg_path = out_dir / f"{label}_rgb_preview.jpg"
+        build_rgb_preview_jpeg(src_path, jpeg_path)
+        results[label]["preview_path"] = str(jpeg_path)
+        print(f"  tiles: built {label} preview JPEG {jpeg_path} ({jpeg_path.stat().st_size / 1e6:.2f}MB)")
+
+    # Week 4-4: browser-displayable flood overlay (colorized PNG + WGS84
+    # corner coords) for the dashboard's flood-overlay map. Built from the
+    # flood COG we just wrote above (out_dir / "flood_overlay.tif"), not
+    # from flood_raster_path directly, so this always renders exactly what
+    # was actually published as the COG.
+    if results.get("flood") is not None:
+        overlay = build_flood_overlay_png(out_dir / "flood_overlay.tif", out_dir / "flood_overlay_preview.png")
+        results["flood"]["preview_path"] = str(overlay["path"])
+        results["flood"]["bounds_wgs84"] = overlay["bounds_wgs84"]
+        bounds_path = out_dir / "flood_overlay_bounds.json"
+        bounds_path.write_text(json.dumps({"bounds_wgs84": overlay["bounds_wgs84"]}, indent=2))
+        print(f"  tiles: built flood overlay preview PNG {overlay['path']} ({overlay['path'].stat().st_size / 1e6:.2f}MB)")
 
     return results

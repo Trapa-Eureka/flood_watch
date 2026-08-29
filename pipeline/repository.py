@@ -97,6 +97,18 @@ def update_event_status(event_id: str, status: str) -> dict:
     return row
 
 
+def update_event_visibility(event_id: str, visibility: str) -> dict:
+    """visibility: 'public' | 'private' (events.visibility CHECK constraint,
+    Week 1-3's RLS migration). No caller needed this until Week 4-3 (a
+    backtest event being marked public for real anon-role dashboard testing)."""
+    url = f"{config.SUPABASE_URL}/rest/v1/events"
+    resp = requests.patch(url, headers=_headers(), params={"id": f"eq.{event_id}"}, json={"visibility": visibility}, timeout=30)
+    _check(resp, "events visibility update")
+    row = resp.json()[0]
+    print(f"  events: {event_id} -> visibility={visibility}")
+    return row
+
+
 # ---------------------------------------------------------------------------
 # scene_refs
 # ---------------------------------------------------------------------------
@@ -142,18 +154,26 @@ def update_scene_ref_cog(scene_ref_id: str, cog_storage_key: Optional[str]) -> d
 # ---------------------------------------------------------------------------
 
 def create_inference_run(event_id: str, model: str, model_version: Optional[str] = None,
-                          input_scene_ids: Optional[list] = None, status: str = "running") -> dict:
+                          input_scene_ids: Optional[list] = None, status: str = "running",
+                          started_at: Optional[str] = None) -> dict:
     """input_scene_ids is a plain list (STAC ids or scene_refs uuids — caller's
     choice, this table just stores whatever jsonb it's given, see spec.md §6).
     Default status='running': in this pipeline inference.run is invoked
     synchronously and awaited (no separate job queue yet), so by the time
     Python code exists to call this, inference has already started — 'pending'
-    would only apply to an async/queued design this project doesn't have."""
+    would only apply to an async/queued design this project doesn't have.
+    started_at: leave None for the normal live-run path (DB defaults to
+    now()); pass an explicit value only when backfilling a real historical
+    run (Week 4-3) — otherwise the inference_runs_finished_after_started
+    CHECK constraint rejects a later update_inference_run(finished_at=<the
+    real, earlier, backfilled time>) call against a now()-defaulted started_at."""
     url = f"{config.SUPABASE_URL}/rest/v1/inference_runs"
     body = {
         "event_id": event_id, "model": model, "model_version": model_version,
         "input_scene_ids": input_scene_ids or [], "status": status,
     }
+    if started_at:
+        body["started_at"] = started_at
     resp = requests.post(url, headers=_headers(), json=body, timeout=30)
     _check(resp, "inference_runs insert")
     row = resp.json()[0]
