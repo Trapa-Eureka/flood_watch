@@ -16,11 +16,9 @@ Week 3-5 (this file, full production version) adds the three things spec.md
      (Week 3-1), matched to Sentinel-2's own 10m pixel resolution for the same
      reason: sub-pixel-scale vertices carry no real information here either.
 """
-import os
-
 from dotenv import load_dotenv
 
-from pipeline import config
+from pipeline.boundaries import fetch_near_bbox
 
 load_dotenv()
 
@@ -38,39 +36,18 @@ MIN_POLYGON_AREA_M2 = 300  # keep polygons >= 3 Sentinel-2 pixels (10m x 10m eac
 SIMPLIFY_TOLERANCE_DEG = 0.0001  # matches pipeline/boundaries.py's SIMPLIFY_TOLERANCE_DEG
 
 
-def _rpc_headers() -> dict:
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-    if not key:
-        raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY not found in .env — see .env.example.")
-    return {"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json"}
-
-
 def fetch_land_union(bbox, pad_ratio: float = 0.1, level: str = "adm3_municipality"):
-    """Fetch admin_boundaries geometries near *bbox* (padded) via the
-    admin_boundaries_near_bbox RPC (Week 3-5 migration — uses the existing
-    admin_boundaries_geom_gix GIST index, so this stays cheap even though the
-    table has 1642+42048 rows total) and union them into one land-mask
-    polygon. Returns a shapely (Multi)Polygon in EPSG:4326, or None if no
-    municipalities are found nearby — a legitimate outcome for an AOI that's
-    genuinely outside PH's land territory (open sea), not an error.
+    """Union of admin_boundaries geometries near *bbox* (via
+    pipeline.boundaries.fetch_near_bbox, Week 3-5's admin_boundaries_near_bbox
+    RPC) — a local land-mask polygon for clipping. Returns a shapely
+    (Multi)Polygon in EPSG:4326, or None if no municipalities are found nearby
+    — a legitimate outcome for an AOI that's genuinely outside PH's land
+    territory (open sea), not an error.
     """
-    import requests
     from shapely.geometry import shape
     from shapely.ops import unary_union
 
-    west, south, east, north = bbox
-    w, h = east - west, north - south
-    west, east = west - w * pad_ratio, east + w * pad_ratio
-    south, north = south - h * pad_ratio, north + h * pad_ratio
-
-    resp = requests.post(
-        f"{config.SUPABASE_URL}/rest/v1/rpc/admin_boundaries_near_bbox",
-        headers=_rpc_headers(),
-        json={"west": west, "south": south, "east": east, "north": north, "p_level": level},
-        timeout=60,
-    )
-    resp.raise_for_status()
-    rows = resp.json()
+    rows = fetch_near_bbox(bbox, level=level, pad_ratio=pad_ratio)
     if not rows:
         return None
     return unary_union([shape(r["geom"]) for r in rows])

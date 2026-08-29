@@ -186,3 +186,35 @@ def create_flood_extent(event_id: str, run_id: str, geom_wkt: str, area_km2: flo
     row = resp.json()[0]
     print(f"  flood_extents: created (id={row['id']}, area_km2={area_km2:.4f})")
     return row
+
+
+# ---------------------------------------------------------------------------
+# exposure_stats
+# ---------------------------------------------------------------------------
+
+def upsert_exposure_stat(event_id: str, admin_boundary_id: str, flooded_area_km2: float,
+                          flooded_area_pct: float, est_population_affected: Optional[float] = None,
+                          est_buildings_affected: Optional[int] = None,
+                          population_source: Optional[str] = None,
+                          building_source: Optional[str] = None) -> dict:
+    """Idempotent on (event_id, admin_boundary_id) — the schema's own unique
+    constraint (same reasoning as scene_refs' upsert: exposure.compute may be
+    re-run for the same event, e.g. after a bug fix, and should replace the
+    old numbers rather than error or duplicate)."""
+    url = f"{config.SUPABASE_URL}/rest/v1/exposure_stats"
+    body = {
+        "event_id": event_id, "admin_boundary_id": admin_boundary_id,
+        "flooded_area_km2": flooded_area_km2, "flooded_area_pct": flooded_area_pct,
+        "est_population_affected": est_population_affected,
+        "est_buildings_affected": est_buildings_affected,
+        "population_source": population_source, "building_source": building_source,
+    }
+    resp = requests.post(
+        url, headers={**_headers(), "Prefer": "return=representation,resolution=merge-duplicates"},
+        params={"on_conflict": "event_id,admin_boundary_id"}, json=body, timeout=30,
+    )
+    _check(resp, "exposure_stats upsert")
+    row = resp.json()[0]
+    print(f"  exposure_stats: admin_boundary_id={admin_boundary_id} flooded_area_km2={flooded_area_km2:.4f} "
+          f"({flooded_area_pct:.2f}%) pop={est_population_affected} buildings={est_buildings_affected}")
+    return row

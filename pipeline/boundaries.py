@@ -72,6 +72,35 @@ def _to_multipolygon_wkt(geojson_geom: dict, simplify_tolerance: float = SIMPLIF
     return geom.wkt
 
 
+def fetch_near_bbox(bbox, level: str = "adm3_municipality", pad_ratio: float = 0.1) -> list:
+    """Fetch admin_boundaries rows near *bbox* (padded) via the
+    admin_boundaries_near_bbox RPC (Week 3-5 migration — uses the existing
+    admin_boundaries_geom_gix GIST index rather than fetching all 1642+42048
+    rows). Returns a list of raw row dicts (geom as GeoJSON, PostgREST's
+    default serialization for a geometry column) — used by both
+    vectorize.py's land-clip (Week 3-5) and exposure.py's per-boundary overlay
+    (Week 3-6), kept here rather than duplicated in each.
+    """
+    import requests
+
+    west, south, east, north = bbox
+    w, h = east - west, north - south
+    west, east = west - w * pad_ratio, east + w * pad_ratio
+    south, north = south - h * pad_ratio, north + h * pad_ratio
+
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    if not key:
+        raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY not found in .env — see .env.example.")
+    resp = requests.post(
+        f"{config.SUPABASE_URL}/rest/v1/rpc/admin_boundaries_near_bbox",
+        headers={"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        json={"west": west, "south": south, "east": east, "north": north, "p_level": level},
+        timeout=60,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
 def load_boundaries(geojson_path: Path, level: str, name_field: str, pcode_field: Optional[str],
                      source: str, vintage: str, batch_size: int = BATCH_SIZE, max_retries: int = 3,
                      is_provisional: bool = False) -> int:

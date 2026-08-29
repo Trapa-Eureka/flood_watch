@@ -129,3 +129,40 @@ def population_sum(raster_path: Path) -> float:
     with rasterio.open(raster_path) as src:
         data = src.read(1, masked=True)
     return float(np.ma.sum(data))
+
+
+def population_sum_in_geometry(national_raster_path: Path, geometry) -> float:
+    """Week 3-6 exposure.compute: zonal sum of population within an arbitrary
+    polygon (e.g. flood-polygon ∩ admin-boundary intersection — NOT just a
+    bbox, unlike crop_to_bbox above, which is why this is a separate function
+    rather than crop_to_bbox + population_sum). *geometry* must be a
+    shapely geometry in EPSG:4326 (WorldPop's native CRS, no reprojection
+    needed). Reads directly off the already-downloaded national raster —
+    no network call.
+    """
+    import numpy as np
+    import rasterio
+    import rasterio.mask
+
+    with rasterio.open(national_raster_path) as src:
+        try:
+            out_image, _ = rasterio.mask.mask(src, [geometry], crop=True, nodata=src.nodata)
+        except ValueError:
+            # rasterio.mask raises ValueError when the geometry doesn't
+            # overlap the raster at all — a legitimate "0 population" outcome
+            # (e.g. a flood polygon fragment that turned out to be entirely
+            # outside WorldPop's PH raster extent), not a real error.
+            return 0.0
+        nodata = src.nodata
+
+    data = out_image[0]
+    if nodata is not None:
+        data = np.ma.masked_equal(data, nodata)
+    total = np.ma.sum(data)
+    # np.ma.sum returns the `masked` constant (not 0) when EVERY pixel is
+    # masked — a real case for a small intersection polygon whose area is
+    # smaller than one 100m WorldPop pixel and happens to not contain any
+    # pixel *center* (rasterio.mask's default all_touched=False test).
+    # That's genuinely "no population grid data available here", not an
+    # error — 0.0 is the correct estimate, not NaN.
+    return 0.0 if total is np.ma.masked else float(total)
