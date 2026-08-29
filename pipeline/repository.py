@@ -121,6 +121,22 @@ def record_scene_ref(event_id: str, item, role: str, storage_key: Optional[str] 
     return row
 
 
+def update_scene_ref_cog(scene_ref_id: str, cog_storage_key: Optional[str]) -> dict:
+    """Fill in the RGB quicklook COG's R2 key (Week 3-8 tiles.publish) after
+    the fact — same reasoning as flood_extents.raster_storage_key: the COG is
+    built/uploaded as a separate step after the scene_ref row itself already
+    exists, so this is a PATCH, not part of record_scene_ref's insert."""
+    url = f"{config.SUPABASE_URL}/rest/v1/scene_refs"
+    resp = requests.patch(
+        url, headers=_headers(), params={"id": f"eq.{scene_ref_id}"},
+        json={"cog_storage_key": cog_storage_key}, timeout=30,
+    )
+    _check(resp, "scene_refs cog_storage_key update")
+    row = resp.json()[0]
+    print(f"  scene_refs: {scene_ref_id} -> cog_storage_key={cog_storage_key}")
+    return row
+
+
 # ---------------------------------------------------------------------------
 # inference_runs
 # ---------------------------------------------------------------------------
