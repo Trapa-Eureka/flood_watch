@@ -10,8 +10,9 @@ import { createClient } from "@supabase/supabase-js";
 // Known, deliberate gap (same migration's own comment): there is no real
 // human-admin login yet, so any Route Handler that imports this module is
 // currently reachable by anyone who can hit the deployed URL, not just an
-// authenticated admin. Week 4-8 ("인증/역할 적용") is where that gets closed
-// — not fixed here, and not silently ignored either.
+// authenticated admin. Week 4-9 ("인증/역할 적용", renumbered from 4-8 by the
+// 2026-08-29 home dashboard redesign) is where that gets closed — not fixed
+// here, and not silently ignored either.
 function supabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;

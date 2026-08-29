@@ -5,10 +5,10 @@ export const dynamic = "force-dynamic"; // event list changes as the pipeline co
 export const metadata = { title: "PH Flood Watch — Events" };
 
 const KIND_LABELS: Record<string, string> = {
-  typhoon: "태풍",
-  monsoon: "몬순",
-  manual: "수동",
-  backtest: "백테스트",
+  typhoon: "Typhoon",
+  monsoon: "Monsoon",
+  manual: "Manual",
+  backtest: "Backtest",
 };
 
 export default async function EventsPage() {
@@ -23,12 +23,12 @@ export default async function EventsPage() {
 
   return (
     <div style={{ maxWidth: 720, margin: "0 auto", padding: "24px 16px" }}>
-      <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 16 }}>이벤트</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 16 }}>Events</h1>
 
-      {error && <p style={{ color: "#b91c1c" }}>오류: {error.message}</p>}
+      {error && <p style={{ color: "#b91c1c" }}>Error: {error.message}</p>}
 
       {events?.length === 0 && (
-        <p style={{ color: "#666" }}>표시할 완료된 공개 이벤트가 아직 없습니다.</p>
+        <p style={{ color: "#666" }}>No completed public events to show yet.</p>
       )}
 
       <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -47,8 +47,8 @@ export default async function EventsPage() {
             >
               <div style={{ fontWeight: 600 }}>{e.name}</div>
               <div style={{ fontSize: 13, color: "#666", marginTop: 4 }}>
-                {KIND_LABELS[e.kind] ?? e.kind} · {(e.aois as unknown as { name: string } | null)?.name ?? "AOI 없음"} ·{" "}
-                {e.pre_event_date} → {e.post_event_date ?? "진행중"}
+                {KIND_LABELS[e.kind] ?? e.kind} · {(e.aois as unknown as { name: string } | null)?.name ?? "No AOI"} ·{" "}
+                {e.pre_event_date} → {e.post_event_date ?? "Ongoing"}
               </div>
             </Link>
           </li>

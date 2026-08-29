@@ -55,26 +55,26 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
     ? (JSON.parse(readFileSync(overlayBoundsPath, "utf-8")).bounds_wgs84 as [number, number][])
     : null;
 
-  const aoiName = (event.aois as unknown as AoiRef)?.name ?? "AOI 없음";
+  const aoiName = (event.aois as unknown as AoiRef)?.name ?? "No AOI";
 
   return (
     <div style={{ maxWidth: 720, margin: "0 auto", padding: "24px 16px", display: "flex", flexDirection: "column", gap: 24 }}>
       <div>
         <h1 style={{ fontSize: 22, fontWeight: 600 }}>{event.name}</h1>
         <p style={{ fontSize: 13, color: "#666", marginTop: 4 }}>
-          {aoiName} · {event.pre_event_date} → {event.post_event_date ?? "진행중"}
+          {aoiName} · {event.pre_event_date} → {event.post_event_date ?? "Ongoing"}
         </p>
       </div>
 
       <section>
-        <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>전후 비교</h2>
+        <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Before / After</h2>
         {hasPost ? (
           <BeforeAfterSlider
             beforeSrc={hasPre ? `/api/tiles/${id}/pre_rgb_preview.jpg` : null}
             afterSrc={`/api/tiles/${id}/post_rgb_preview.jpg`}
           />
         ) : (
-          <p style={{ color: "#666" }}>이 이벤트는 아직 타일이 생성되지 않았습니다.</p>
+          <p style={{ color: "#666" }}>Tiles have not been generated for this event yet.</p>
         )}
         {hasPost && (
           // spec.md §13's standing rule — every map/report showing Sentinel
@@ -86,45 +86,45 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
       </section>
 
       <section>
-        <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>침수 오버레이 지도</h2>
+        <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Flood Overlay Map</h2>
         {hasFloodOverlay && floodOverlayBounds ? (
           <FloodOverlayMap
             overlayUrl={`/api/tiles/${id}/flood_overlay_preview.png`}
             bounds={floodOverlayBounds as [[number, number], [number, number], [number, number], [number, number]]}
           />
         ) : (
-          <p style={{ color: "#666" }}>이 이벤트는 침수 오버레이가 아직 생성되지 않았습니다.</p>
+          <p style={{ color: "#666" }}>No flood overlay has been generated for this event yet.</p>
         )}
       </section>
 
       <section>
-        <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>피해 통계 (시군 단위)</h2>
+        <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Impact Stats (municipality level)</h2>
         {adm3Stats.length === 0 ? (
-          <p style={{ color: "#666" }}>노출도 데이터가 없습니다.</p>
+          <p style={{ color: "#666" }}>No exposure data available.</p>
         ) : (
           <>
             <div style={{ display: "flex", gap: 24, marginBottom: 12, fontSize: 14 }}>
               <div>
                 <div style={{ fontSize: 20, fontWeight: 700 }}>{totalAreaKm2.toFixed(2)} km²</div>
-                <div style={{ color: "#666" }}>총 침수 면적</div>
+                <div style={{ color: "#666" }}>Total flooded area</div>
               </div>
               <div>
                 <div style={{ fontSize: 20, fontWeight: 700 }}>{totalPop.toLocaleString()}</div>
-                <div style={{ color: "#666" }}>추정 영향 인구</div>
+                <div style={{ color: "#666" }}>Est. population affected</div>
               </div>
               <div>
                 <div style={{ fontSize: 20, fontWeight: 700 }}>{totalBuildings.toLocaleString()}</div>
-                <div style={{ color: "#666" }}>추정 영향 건물</div>
+                <div style={{ color: "#666" }}>Est. buildings affected</div>
               </div>
             </div>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb" }}>
-                  <th style={{ padding: "6px 8px" }}>시군</th>
-                  <th style={{ padding: "6px 8px" }}>침수 면적</th>
-                  <th style={{ padding: "6px 8px" }}>비율</th>
-                  <th style={{ padding: "6px 8px" }}>인구</th>
-                  <th style={{ padding: "6px 8px" }}>건물</th>
+                  <th style={{ padding: "6px 8px" }}>Municipality</th>
+                  <th style={{ padding: "6px 8px" }}>Flooded area</th>
+                  <th style={{ padding: "6px 8px" }}>Pct</th>
+                  <th style={{ padding: "6px 8px" }}>Population</th>
+                  <th style={{ padding: "6px 8px" }}>Buildings</th>
                 </tr>
               </thead>
               <tbody>
@@ -147,7 +147,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
       </section>
 
       <p style={{ fontSize: 12, color: "#999" }}>
-        AI 추정치이며 공식 재해 판정이 아닙니다. PAGASA/지자체 공식 발표를 함께 확인하세요.
+        This is an AI-generated estimate, not an official disaster determination. Please check official PAGASA/LGU announcements as well.
       </p>
     </div>
   );

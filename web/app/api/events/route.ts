@@ -18,7 +18,7 @@ type CreateEventBody = {
 // POST /api/events — spec.md §7 events.create: register an event against
 // either an existing AOI (aoiId) or a freshly-drawn one (newAoi), Week 4-2's
 // "AOI 자유 지정 + 이벤트 등록". Runs with service_role (via supabase-admin,
-// see that module's own doc comment for the Week 4-8 auth gap this
+// see that module's own doc comment for the Week 4-9 auth gap this
 // deliberately doesn't solve yet) since aois/events have no anon/authenticated
 // INSERT policy — spec.md §4 gives write access to admin only, and until
 // real login exists, this route *is* that boundary, imperfect as it is.
@@ -84,4 +84,18 @@ export async function POST(req: Request) {
   if (eventError) return NextResponse.json({ error: `events insert failed: ${eventError.message}` }, { status: 500 });
 
   return NextResponse.json({ event: eventRow }, { status: 201 });
+}
+
+// GET /api/events — Week4-6 admin event list (every status, not just
+// completed+public like the RLS-scoped public /events page) — service_role,
+// same reasoning as GET /api/aois: admins need to see 'registered'/
+// 'processing'/'failed' rows to actually trigger/monitor the pipeline.
+export async function GET() {
+  const { data, error } = await supabaseAdmin()
+    .from("events")
+    .select("id, name, kind, status, visibility, pre_event_date, post_event_date, created_at, aois(name)")
+    .order("created_at", { ascending: false });
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ events: data });
 }

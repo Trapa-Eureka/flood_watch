@@ -97,6 +97,19 @@ def update_event_status(event_id: str, status: str) -> dict:
     return row
 
 
+def get_event_with_aoi(event_id: str) -> Optional[dict]:
+    """events + its AOI bbox, via the event_aoi_bbox RPC (Week 4-6 migration) —
+    the pipeline orchestrator's entry point for turning "an arbitrary
+    user-registered event_id" into the same (bbox, pre/post dates) shape every
+    prior script in this project got from a hardcoded config.AOI_BBOX literal.
+    Returns None if the event_id doesn't exist (caller's job to 404/report)."""
+    url = f"{config.SUPABASE_URL}/rest/v1/rpc/event_aoi_bbox"
+    resp = requests.post(url, headers=_headers(), json={"p_event_id": event_id}, timeout=30)
+    _check(resp, "event_aoi_bbox rpc")
+    rows = resp.json()
+    return rows[0] if rows else None
+
+
 def update_event_visibility(event_id: str, visibility: str) -> dict:
     """visibility: 'public' | 'private' (events.visibility CHECK constraint,
     Week 1-3's RLS migration). No caller needed this until Week 4-3 (a

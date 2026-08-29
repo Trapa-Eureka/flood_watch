@@ -8,10 +8,10 @@ type Aoi = { id: string; name: string; kind: "river_basin" | "custom"; watch_pri
 type EventKind = "typhoon" | "monsoon" | "manual" | "backtest";
 
 const EVENT_KIND_LABELS: Record<EventKind, string> = {
-  typhoon: "태풍",
-  monsoon: "몬순",
-  manual: "수동",
-  backtest: "백테스트",
+  typhoon: "Typhoon",
+  monsoon: "Monsoon",
+  manual: "Manual",
+  backtest: "Backtest",
 };
 
 function bboxFieldsValid(b: (number | "")[]): b is number[] {
@@ -96,37 +96,37 @@ export default function EventForm() {
 
   return (
     <form onSubmit={handleSubmit} style={{ maxWidth: 720, margin: "0 auto", padding: "24px 16px", display: "flex", flexDirection: "column", gap: 20 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 600 }}>이벤트 등록</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 600 }}>Register Event</h1>
 
       <section>
         <div style={{ display: "flex", gap: 16, marginBottom: 8 }}>
           <label>
-            <input type="radio" checked={aoiMode === "new"} onChange={() => setAoiMode("new")} /> 새 AOI 지정
+            <input type="radio" checked={aoiMode === "new"} onChange={() => setAoiMode("new")} /> New AOI
           </label>
           <label>
-            <input type="radio" checked={aoiMode === "existing"} onChange={() => setAoiMode("existing")} /> 기존 AOI 사용
+            <input type="radio" checked={aoiMode === "existing"} onChange={() => setAoiMode("existing")} /> Existing AOI
           </label>
         </div>
 
         {aoiMode === "existing" ? (
           <select value={selectedAoiId} onChange={(e) => setSelectedAoiId(e.target.value)} style={{ width: "100%", padding: 8 }}>
-            <option value="">— AOI 선택 —</option>
+            <option value="">— Select AOI —</option>
             {(aois ?? []).map((a) => (
               <option key={a.id} value={a.id}>
-                {a.name} {a.kind === "river_basin" ? `(우선감시, priority ${a.watch_priority})` : "(custom)"}
+                {a.name} {a.kind === "river_basin" ? `(priority watch, priority ${a.watch_priority})` : "(custom)"}
               </option>
             ))}
           </select>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <input
-              placeholder="AOI 이름 (예: Cagayan Valley)"
+              placeholder="AOI name (e.g. Cagayan Valley)"
               value={newAoiName}
               onChange={(e) => setNewAoiName(e.target.value)}
               style={{ padding: 8 }}
             />
             <p style={{ fontSize: 13, color: "#666", margin: 0 }}>
-              지도 위에서 클릭·드래그로 사각형을 그리거나, 아래 좌표를 직접 입력하세요.
+              Click and drag on the map to draw a rectangle, or enter coordinates directly below.
             </p>
             <AoiBboxMap value={bbox} onChange={handleMapDraw} />
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
@@ -149,12 +149,12 @@ export default function EventForm() {
 
       <section style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          이벤트 이름
+          Event name
           <input value={name} onChange={(e) => setName(e.target.value)} style={{ padding: 8 }} />
         </label>
 
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          종류
+          Kind
           <select value={kind} onChange={(e) => setKind(e.target.value as EventKind)} style={{ padding: 8 }}>
             {(Object.keys(EVENT_KIND_LABELS) as EventKind[]).map((k) => (
               <option key={k} value={k}>
@@ -166,31 +166,31 @@ export default function EventForm() {
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            사전(pre-event) 날짜
+            Pre-event date
             <input type="date" value={preEventDate} onChange={(e) => setPreEventDate(e.target.value)} style={{ padding: 8 }} />
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            사후(post-event) 날짜 (선택)
+            Post-event date (optional)
             <input type="date" value={postEventDate} onChange={(e) => setPostEventDate(e.target.value)} style={{ padding: 8 }} />
           </label>
         </div>
 
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          공개 범위
+          Visibility
           <select value={visibility} onChange={(e) => setVisibility(e.target.value as "private" | "public")} style={{ padding: 8 }}>
-            <option value="private">비공개 (기본값 — 로그인 사용자만)</option>
-            <option value="public">공개</option>
+            <option value="private">Private (default — signed-in users only)</option>
+            <option value="public">Public</option>
           </select>
         </label>
       </section>
 
       <button type="submit" disabled={!canSubmit || submitting} style={{ padding: "10px 16px", fontWeight: 600 }}>
-        {submitting ? "등록 중..." : "이벤트 등록"}
+        {submitting ? "Registering..." : "Register Event"}
       </button>
 
       {result && (
         <p style={{ color: result.ok ? "#166534" : "#b91c1c" }}>
-          {result.ok ? `등록 완료 — event id: ${result.eventId}` : `오류: ${result.error}`}
+          {result.ok ? `Registered — event id: ${result.eventId}` : `Error: ${result.error}`}
         </p>
       )}
     </form>

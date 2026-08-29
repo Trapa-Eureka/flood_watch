@@ -11,9 +11,9 @@ const LAYER_ID = "flood-overlay-layer";
 // Same class-code -> color mapping as pipeline/tiles.py's FLOOD_CLASS_COLORS
 // (kept in sync manually — this is a legend, not a re-derivation of the PNG).
 const LEGEND = [
-  { label: "신규 침수", color: "rgba(217,45,32,0.85)" },
-  { label: "기존 수역 (JRC 상시수)", color: "rgba(49,109,204,0.65)" },
-  { label: "구름 마스크 (판정불가)", color: "rgba(140,140,140,0.5)" },
+  { label: "New flooding", color: "rgba(217,45,32,0.85)" },
+  { label: "Existing water (JRC permanent)", color: "rgba(49,109,204,0.65)" },
+  { label: "Cloud-masked (unclassified)", color: "rgba(140,140,140,0.5)" },
 ];
 
 type Corner = [number, number];
@@ -113,7 +113,7 @@ export default function FloodOverlayMap({
           color: "#111",
         }}
       >
-        투명도
+        Opacity
         <input
           type="range"
           min={0.2}

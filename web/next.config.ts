@@ -48,7 +48,11 @@ const nextConfig: NextConfig = {
               // guessing a domain that might not be the one actually chosen.
               "img-src 'self' data: blob:",
               "font-src 'self'",
-              `connect-src 'self' https://tiles.openfreemap.org ${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}`,
+              // Week4-5's rainfall overlay: api.librewxr.net serves both the
+              // frame-index JSON (fetched server-side in page.tsx — doesn't
+              // need CSP at all) and the actual XYZ tile images MapLibre
+              // requests client-side (the reason this entry exists).
+              `connect-src 'self' https://tiles.openfreemap.org https://api.librewxr.net ${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}`,
               "worker-src 'self' blob:",
               "frame-ancestors 'none'",
             ].join("; "),

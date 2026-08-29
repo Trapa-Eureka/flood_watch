@@ -10,8 +10,8 @@ import { useCallback, useRef, useState } from "react";
 export default function BeforeAfterSlider({
   beforeSrc,
   afterSrc,
-  beforeLabel = "사전(pre-event)",
-  afterLabel = "사후(post-event)",
+  beforeLabel = "Pre-event",
+  afterLabel = "Post-event",
 }: {
   beforeSrc: string | null;
   afterSrc: string;
@@ -35,8 +35,8 @@ export default function BeforeAfterSlider({
       <div>
         <img src={afterSrc} alt={afterLabel} style={{ width: "100%", borderRadius: 8, display: "block" }} />
         <p style={{ fontSize: 13, color: "#666", marginTop: 8 }}>
-          이 이벤트는 사전(pre-event) 이미지가 없습니다 — 태풍 직후 구름으로 AOI 국소 품질 기준을 통과하는 사전
-          촬영본을 확보하지 못했습니다(실제 데이터 한계, 표시 오류 아님).
+          No pre-event image is available for this event — no baseline scene passed the AOI-local cloud-cover
+          threshold right after the typhoon (a real data limitation, not a display error).
         </p>
       </div>
     );
@@ -117,7 +117,7 @@ export default function BeforeAfterSlider({
           {afterLabel}
         </span>
       </div>
-      <p style={{ fontSize: 12, color: "#999", marginTop: 6 }}>드래그해서 사전/사후 비교</p>
+      <p style={{ fontSize: 12, color: "#999", marginTop: 6 }}>Drag to compare pre/post</p>
     </div>
   );
 }
