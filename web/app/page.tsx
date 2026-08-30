@@ -73,9 +73,20 @@ async function fetchRainfallLayer(attempt = 1): Promise<RainfallLayer> {
 export default async function Home() {
   const supabase = await supabaseServer();
 
+  // Week 4-10 integration test found this live: before Week 4-9's client
+  // swap, RLS alone was enough to guarantee "completed" here (anon could
+  // never see anything else). A logged-in admin/viewer session now
+  // legitimately sees registered/processing/failed rows too (RLS's own
+  // events_select_admin/_viewer policies) — correct for /admin and /events,
+  // but this dashboard was never meant to show pipeline-internal statuses,
+  // only the same "what actually happened" summary regardless of who's
+  // looking. Explicit .eq("status","completed") restores that, while still
+  // letting a logged-in viewer see private-but-completed events (RLS still
+  // decides visibility, this only decides status).
   const { data: events } = await supabase
     .from("events")
     .select("id, name, kind, post_event_date, created_at")
+    .eq("status", "completed")
     .order("post_event_date", { ascending: false });
 
   // Flood overlay layers for the home map — reuses the exact Week4-4 local

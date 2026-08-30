@@ -445,7 +445,7 @@ export default function HomeDashboardMap({
             </div>
             <div style={{ ...microLabel, marginBottom: 8 }}>Most affected regions</div>
             {nationalStats.topRegions.length === 0 ? (
-              <p style={{ fontSize: 12, color: "#9ca3af" }}>No completed public events to show yet.</p>
+              <p style={{ fontSize: 12, color: "#9ca3af" }}>No completed events to show yet.</p>
             ) : (
               // key includes index: the same municipality can legitimately
               // appear twice (once per event that actually affected it, see
@@ -491,7 +491,11 @@ export default function HomeDashboardMap({
               ))
             )}
             <div style={{ marginTop: 14, fontSize: 11, color: "#9ca3af" }}>
-              {nationalStats.eventCount} completed public event{nationalStats.eventCount === 1 ? "" : "s"}
+              {/* Week 4-10: dropped "public" — no longer accurate once a
+                  logged-in viewer/admin can see private-but-completed
+                  events here too (see page.tsx's comment on the query this
+                  count comes from). */}
+              {nationalStats.eventCount} completed event{nationalStats.eventCount === 1 ? "" : "s"}
               {nationalStats.lastUpdated && ` · Last updated ${new Date(nationalStats.lastUpdated).toLocaleString("en-PH")}`}
             </div>
           </>
