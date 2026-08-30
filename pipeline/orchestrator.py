@@ -14,16 +14,17 @@ re-derives pipeline logic; it only sequences existing modules and persists
 their results via pipeline/repository.py, exactly as those modules' own
 integration tests (tools/week*_integration_test.py) already did by hand.
 
-Honest scope note (see docs/design-notes.md "Week 4-6"): inference.run shells
-out to `modal run` (Week 2's proven ephemeral-invocation path) rather than
-calling a deployed Modal app directly — the app isn't `modal deploy`d yet,
-formalizing that deployment is Week 4-8's job specifically, not this one's.
+Week 4-8 update: inference.run used to shell out to `modal run` (Week 2's
+proven ephemeral-invocation path, documented here as an honest scope note at
+the time — the app wasn't `modal deploy`d yet). It's now deployed for real
+(`modal deploy pipeline/inference/modal_app.py --env staging|main`) and this
+module calls the deployed app directly via `modal.Cls.from_name(...)`
+instead — see run_inference_via_modal()'s own docstring for why that's a
+real improvement, not just a style change.
 
 Usage:
   python -m pipeline.orchestrator <event_id>
 """
-import subprocess
-import sys
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -47,23 +48,29 @@ def _date_window(anchor: str, days: int = SEARCH_WINDOW_DAYS) -> tuple[str, str]
 
 
 def run_inference_via_modal(composite_path: Path, out_path: Path) -> None:
-    """Invokes pipeline/inference/modal_app.py's @app.local_entrypoint() as a
-    subprocess — the exact command Week 2-2/2-4's real GPU tests already used
-    by hand (`modal run pipeline/inference/modal_app.py --composite-path ...
-    --output-path ...`), just issued programmatically here instead of typed.
-    Needs `modal setup`'s auth (~/.modal.toml, Week 2-1) already done, which
-    it is — nothing new to authenticate for this step."""
-    cmd = [
-        sys.executable, "-m", "modal", "run",
-        str(config.REPO_ROOT / "pipeline" / "inference" / "modal_app.py"),
-        "--composite-path", str(composite_path),
-        "--output-path", str(out_path),
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
-    if result.returncode != 0:
-        raise RuntimeError(f"modal run failed (exit {result.returncode}): {result.stderr[-4000:]}")
-    if not out_path.exists():
-        raise RuntimeError(f"modal run exited 0 but did not write {out_path} — stdout tail: {result.stdout[-2000:]}")
+    """Calls the deployed pipeline/inference/modal_app.py app directly via
+    the Modal Python SDK — `modal.Cls.from_name(app_name, "PrithviInference",
+    environment_name=...)` looks up the already-`modal deploy`d class and
+    `.run.remote(...)` invokes it exactly like any other method call, no
+    subprocess/CLI involved. This replaces the Week4-6 `modal run` subprocess
+    hack (kept working then because the app wasn't deployed yet) with what
+    Modal's own docs call the normal way to call a deployed app from other
+    Python code — real, not "more idiomatic for its own sake":
+      - no ~1-2s per-call CLI startup overhead, and no re-parsing modal_app.py
+        to build an *ephemeral* app on every single pipeline run (`modal run`
+        does this every time; a deployed app is looked up once, already built)
+      - errors surface as real Python exceptions from modal's client library
+        instead of a subprocess exit code + stderr string this code had to
+        pattern-match
+    config.MODAL_ENVIRONMENT picks staging vs production (main) — see
+    config.py's own comment for why it defaults to staging."""
+    import modal
+
+    composite_bytes = composite_path.read_bytes()
+    prithvi_cls = modal.Cls.from_name(config.MODAL_APP_NAME, "PrithviInference", environment_name=config.MODAL_ENVIRONMENT)
+    pred_bytes = prithvi_cls().run.remote(composite_bytes, input_indices=[0, 1, 2, 3, 4, 5])
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_bytes(pred_bytes)
 
 
 def _run_baseline_diff(masked_pred_path: Path, bbox, out_path: Path) -> None:
@@ -225,6 +232,7 @@ def run_event_pipeline(event_id: str) -> dict:
         flood_extent = repository.create_flood_extent(event_id, run_id, vec["geom_wkt"], vec["area_km2"])
 
         with pipeline_step("exposure.compute", event_id=event_id, run_id=run_id) as ctx:
+            from pipeline.db import touch_event
             from pipeline.exposure import compute_exposure_stats
 
             n_rows = 0
@@ -239,6 +247,20 @@ def run_event_pipeline(event_id: str) -> dict:
                         row["population_source"], row["building_source"],
                     )
                     n_rows += 1
+                    # Week 4-8: pipeline_step()'s own touch_event() only
+                    # fires once, when this whole `with` block exits — but a
+                    # real ADM4 (barangay) run was measured spending 45+
+                    # minutes entirely INSIDE this loop (slow external
+                    # building-footprint API, see docs/design-notes.md
+                    # "Week 4-8"), well past the 20-minute staleness
+                    # threshold both the Next.js manual-retry route and the
+                    # Cloudflare Worker Cron watchdog use. Touching every 5
+                    # rows keeps the gap well under that threshold without
+                    # adding meaningful overhead next to the per-row
+                    # upsert_exposure_stat() network call that's already
+                    # happening anyway.
+                    if n_rows % 5 == 0:
+                        touch_event(event_id)
             ctx.output = {"rows_written": n_rows}
 
         with pipeline_step("tiles.publish", event_id=event_id, run_id=run_id) as ctx:

@@ -4,7 +4,22 @@ Collects the AOI bbox, event date windows, and STAC/model endpoints in one place
 (Anticipates spec §13's rule: "model/preprocessing parameters live only in config" —
 in the 5-week sprint this file's counterpart on the Next.js side is config/model.ts.)
 """
+import os
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Week 4-8: this module now reads MODAL_ENVIRONMENT from the environment at
+# IMPORT time (a plain module-level constant, not a lazy per-call os.environ
+# read like db.py's _supabase_headers() uses for secrets) — so .env has to
+# be loaded before that line runs. Every caller so far has relied on
+# *its own* later `from dotenv import load_dotenv; load_dotenv()` call, which
+# is too late if that caller imports `pipeline.config` first (several do).
+# load_dotenv() is safe to call more than once, so doing it here too — before
+# anything below reads os.environ — makes config.py self-sufficient
+# regardless of import order, instead of silently depending on whichever
+# other module happened to load .env first.
+load_dotenv()
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_RAW_DIR = REPO_ROOT / "data" / "raw"
@@ -55,6 +70,23 @@ SENTINEL2_COLLECTION = "sentinel-2-l2a"
 # Step 4 tries both — falls back to 100M if 300M fails.
 PRITHVI_CHECKPOINT_PRIMARY = "ibm-nasa-geospatial/Prithvi-EO-2.0-300M-TL-Sen1Floods11"
 PRITHVI_CHECKPOINT_FALLBACK = "ibm-nasa-geospatial/Prithvi-EO-1.0-100M-sen1floods11"
+
+# --- Modal (spec.md §5 serverless GPU deployment, Week 4-8 formalization) -----
+# pipeline/inference/modal_app.py's app name — same name in both environments
+# below, Modal's "environment" concept (not the app name) is what separates
+# staging from production, matching the CLI's own model (`modal environment
+# create/list`, `modal deploy --env <name>`). Real deploy history:
+#   modal deploy pipeline/inference/modal_app.py --env staging     (verified)
+#   modal deploy pipeline/inference/modal_app.py --env main        (verified)
+# "main" is Modal's own default environment name (already existed pre-Week4-8,
+# `modal environment list` showed it as the only one) — used as production
+# here rather than creating a redundant third env just to rename it.
+MODAL_APP_NAME = "ph-flood-watch-inference"
+# Defaults to staging — a real production run must opt in explicitly
+# (MODAL_ENVIRONMENT=main in .env), same "don't default to spending real
+# money/hitting the real environment" caution this project already applies
+# elsewhere (e.g. Week4-6's GPU-cost-conscious kill of a runaway test run).
+MODAL_ENVIRONMENT = os.environ.get("MODAL_ENVIRONMENT", "staging")
 
 # --- Supabase (spec.md §5/§6 PostGIS DB) --------------------------------------
 # project created 2026-08-28 (Week 1-3, docs/design-notes.md), Singapore region.

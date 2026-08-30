@@ -1,0 +1,30 @@
+# Week 4-8: Cloudflare Worker Cron watchdog — spec.md §5's "Cloudflare Workers
+# Cron(관리자 트리거 후 상태 폴링)" piece of the architecture. See
+# src/index.ts's module docstring for what this actually does and why (a
+# server-side stale-'processing'-event sweep, not a pipeline trigger — the
+# heavy Python/GDAL pipeline itself can't run inside a Workers isolate).
+name = "ph-flood-watch-stale-event-watchdog"
+main = "src/index.ts"
+compatibility_date = "2026-08-30"
+
+[triggers]
+# Every 5 minutes — cheap (free tier) and fine-grained enough relative to the
+# 20-minute staleness threshold below (STALE_MINUTES) that a stuck event
+# won't sit undetected for much longer than that threshold itself.
+crons = ["*/5 * * * *"]
+
+[vars]
+# Not secret — same reasoning pipeline/config.py already documents for this
+# same URL (it's derived from a project ref, not a credential).
+SUPABASE_URL = "https://xaljckiwksyjtasvjagg.supabase.co"
+# Mirrors web/app/api/events/[id]/run/route.ts's STALE_MS constant (20 * 60 *
+# 1000). Two separate runtimes (this Worker, that Next.js route) can't share
+# one literal constant across a language boundary — duplicated on purpose,
+# not an oversight; if one changes, the other should be updated to match.
+STALE_MINUTES = "20"
+
+# SUPABASE_SERVICE_ROLE_KEY is set as an encrypted secret, not a plaintext
+# var here — `wrangler secret put SUPABASE_SERVICE_ROLE_KEY`. Needed because
+# 'processing'/'failed' events are invisible to the anon key under Week1-3's
+# RLS policies (same reason the Next.js admin routes use supabaseAdmin(),
+# not supabasePublic()).

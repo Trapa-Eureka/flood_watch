@@ -41,14 +41,21 @@ from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv()
 
-# Mirrors the `step` CHECK constraint in
-# supabase/migrations/20260828142445_initial_schema.sql — keep both lists in
-# sync. A step not in this set fails fast here with a clear Python error,
-# instead of a 400 from PostgREST that's one layer further from the mistake.
+# Mirrors the `step` CHECK constraint in supabase/migrations/
+# 20260828142445_initial_schema.sql (widened by 20260830110000_pipeline_
+# events_watchdog_step.sql) — keep both lists in sync. A step not in this set
+# fails fast here with a clear Python error, instead of a 400 from PostgREST
+# that's one layer further from the mistake.
+#
+# "watchdog.stale_check" is written by the Cloudflare Worker Cron watchdog
+# (workers/stale-event-watchdog/, Week 4-8), not by this Python module — it's
+# listed here purely so this set stays the single source of truth for "every
+# step name that's actually valid," even though nothing in pipeline/ itself
+# ever logs it.
 VALID_STEPS = {
     "aois.list_watched", "events.create", "scenes.fetch", "preprocess.run",
     "inference.run", "baseline.diff", "vectorize.extract", "exposure.compute",
-    "tiles.publish", "reports.generate",
+    "tiles.publish", "reports.generate", "watchdog.stale_check",
 }
 
 
@@ -89,6 +96,40 @@ def log_pipeline_event(step: str, status: str, input=None, output=None,
     return resp.json()[0]
 
 
+def touch_event(event_id: Optional[str]) -> None:
+    """Week 4-8 finding, discovered live: events.updated_at previously only
+    changed at pipeline start/end (repository.update_event_status()'s two
+    calls per run), never on the individual steps in between. That's exactly
+    the column BOTH staleness checks read — web/app/api/events/[id]/run/
+    route.ts's manual-retry guard and the Cloudflare Worker Cron watchdog
+    (workers/stale-event-watchdog/) — to tell "genuinely still working" from
+    "actually dead." Called automatically by pipeline_step() on every
+    successfully-logged step (see below), AND called directly (public on
+    purpose, not `_`-prefixed) from inside orchestrator.py's exposure.compute
+    loop — that step alone was measured taking 45+ minutes in a real run
+    (ADM4 barangay-level exposure over a slow external building-footprint
+    API, see docs/design-notes.md "Week 4-8"), entirely inside ONE
+    pipeline_step() context, so the once-per-step call alone still leaves a
+    45-minute gap. A single per-step touch was not enough; anywhere a single
+    step can itself run long enough to approach the staleness threshold
+    needs its own periodic touch call.
+
+    Best-effort: a failure here must never break the actual pipeline step it
+    was called from, so it's swallowed (with a stderr note) rather than
+    raised."""
+    if not event_id:
+        return
+    try:
+        url = f"{config.SUPABASE_URL}/rest/v1/events"
+        # Re-PATCHing id to its own value is a genuine column write (fires
+        # the set_updated_at trigger) without changing anything else about
+        # the row — same technique repository.update_event_status() uses
+        # for its own (real) status changes, just with a no-op value here.
+        requests.patch(url, headers=_supabase_headers(), params={"id": f"eq.{event_id}"}, json={"id": event_id}, timeout=10)
+    except Exception as e:  # noqa: BLE001 — liveness heartbeat only, never fatal
+        print(f"  (warning) touch_event({event_id}) failed, non-fatal: {type(e).__name__}: {e}")
+
+
 class _StepContext:
     def __init__(self, input):
         self.input = input
@@ -107,6 +148,8 @@ def pipeline_step(step: str, event_id: Optional[str] = None, run_id: Optional[st
             step, "failed", input=input, output={"error": f"{type(e).__name__}: {e}"},
             event_id=event_id, run_id=run_id,
         )
+        touch_event(event_id)
         raise
     else:
         log_pipeline_event(step, "success", input=input, output=ctx.output, event_id=event_id, run_id=run_id)
+        touch_event(event_id)
