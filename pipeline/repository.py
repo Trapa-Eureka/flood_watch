@@ -71,6 +71,24 @@ def get_or_create_aoi(name: str, kind: str, bbox, watch_priority: int = 0) -> di
     return row
 
 
+def promote_aoi(aoi_id: str, *, name: Optional[str] = None, kind: Optional[str] = None,
+                 watch_priority: Optional[int] = None) -> dict:
+    """In-place update of an existing aois row (e.g. Week 5-3: an event-specific
+    'custom' AOI that turns out to double as one of the watch_priority basins —
+    reuses the id rather than inserting a near-duplicate row for the same
+    geometry; events.aoi_id keeps resolving correctly since only the id is a
+    foreign key, never the name)."""
+    body = {k: v for k, v in {"name": name, "kind": kind, "watch_priority": watch_priority}.items() if v is not None}
+    if not body:
+        raise ValueError("promote_aoi: nothing to update")
+    url = f"{config.SUPABASE_URL}/rest/v1/aois"
+    resp = requests.patch(url, headers=_headers(), params={"id": f"eq.{aoi_id}"}, json=body, timeout=30)
+    _check(resp, "aois update")
+    row = resp.json()[0]
+    print(f"  aois: {aoi_id} -> {body}")
+    return row
+
+
 # ---------------------------------------------------------------------------
 # events
 # ---------------------------------------------------------------------------
