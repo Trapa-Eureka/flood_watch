@@ -10,6 +10,7 @@ Same reasoning as pipeline/db.py for *how* it talks to Postgres: plain
 (bypasses RLS — this is backend-only code), not supabase-py/psycopg2.
 """
 import os
+import time
 from typing import Optional
 
 import requests
@@ -249,7 +250,20 @@ def upsert_exposure_stat(event_id: str, admin_boundary_id: str, flooded_area_km2
     """Idempotent on (event_id, admin_boundary_id) — the schema's own unique
     constraint (same reasoning as scene_refs' upsert: exposure.compute may be
     re-run for the same event, e.g. after a bug fix, and should replace the
-    old numbers rather than error or duplicate)."""
+    old numbers rather than error or duplicate).
+
+    Week 5-1 finding: this is the one repository.py write called in a tight
+    loop — once per intersecting admin boundary, both adm3 and adm4 levels
+    (orchestrator.py's exposure.compute step). For a small AOI like Marikina
+    that's a few dozen calls; for a real large basin (Cagayan Valley, spec.md's
+    own listed backtest candidate) it's several hundred, over an hour-plus
+    wall-clock. Hit this live: a single transient `requests.exceptions.
+    ReadTimeout` on one call (30s network hiccup, nothing wrong with the data)
+    killed an entire ~90-minute run that had already gotten through
+    scenes.fetch/inference.run/baseline.diff/vectorize.extract and most of
+    exposure.compute — no other repository.py function is called often enough
+    for that statistical exposure to matter, which is why the retry is scoped
+    to just this one rather than added everywhere on principle."""
     url = f"{config.SUPABASE_URL}/rest/v1/exposure_stats"
     body = {
         "event_id": event_id, "admin_boundary_id": admin_boundary_id,
@@ -258,15 +272,26 @@ def upsert_exposure_stat(event_id: str, admin_boundary_id: str, flooded_area_km2
         "est_buildings_affected": est_buildings_affected,
         "population_source": population_source, "building_source": building_source,
     }
-    resp = requests.post(
-        url, headers={**_headers(), "Prefer": "return=representation,resolution=merge-duplicates"},
-        params={"on_conflict": "event_id,admin_boundary_id"}, json=body, timeout=30,
-    )
-    _check(resp, "exposure_stats upsert")
-    row = resp.json()[0]
-    print(f"  exposure_stats: admin_boundary_id={admin_boundary_id} flooded_area_km2={flooded_area_km2:.4f} "
-          f"({flooded_area_pct:.2f}%) pop={est_population_affected} buildings={est_buildings_affected}")
-    return row
+    last_error = None
+    for attempt in range(1, 4):
+        try:
+            resp = requests.post(
+                url, headers={**_headers(), "Prefer": "return=representation,resolution=merge-duplicates"},
+                params={"on_conflict": "event_id,admin_boundary_id"}, json=body, timeout=30,
+            )
+            _check(resp, "exposure_stats upsert")
+            row = resp.json()[0]
+            print(f"  exposure_stats: admin_boundary_id={admin_boundary_id} flooded_area_km2={flooded_area_km2:.4f} "
+                  f"({flooded_area_pct:.2f}%) pop={est_population_affected} buildings={est_buildings_affected}")
+            return row
+        except (requests.exceptions.ConnectionError, requests.exceptions.ReadTimeout) as e:
+            last_error = e
+            if attempt < 3:
+                wait_s = 2 * attempt
+                print(f"  (warning) exposure_stats upsert for {admin_boundary_id} failed (attempt {attempt}/3, "
+                      f"{type(e).__name__}), retrying in {wait_s}s...")
+                time.sleep(wait_s)
+    raise last_error
 
 
 # ---------------------------------------------------------------------------

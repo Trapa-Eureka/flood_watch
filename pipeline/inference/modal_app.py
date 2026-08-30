@@ -51,7 +51,16 @@ inference_image = (
 )
 
 
-@app.cls(image=inference_image, gpu="T4", volumes={CHECKPOINT_DIR: checkpoint_volume}, timeout=600)
+# Week 5-1 finding: 600s (the original value, sized around Marikina's own
+# 12-tile composite at ~115-190s steady-state — Week2-4) was too short for a
+# real, larger AOI — the Cagayan Valley backtest (spec.md's own listed
+# backtest candidate) produces a ~3957x4412 composite, ~72 non-overlapping
+# 512x512 tiles (prithvi_inference.py's fixed tile size) processed
+# sequentially (Week2-4's already-documented, not-yet-optimized limitation)
+# — hit modal.exception.FunctionTimeoutError live at exactly 600s. 1800s
+# gives headroom for AOIs several times Cagayan's size at the same per-tile
+# rate, while still being a real bound, not "make it infinite."
+@app.cls(image=inference_image, gpu="T4", volumes={CHECKPOINT_DIR: checkpoint_volume}, timeout=1800)
 class PrithviInference:
     @modal.enter()
     def load(self):
