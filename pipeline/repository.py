@@ -267,3 +267,22 @@ def upsert_exposure_stat(event_id: str, admin_boundary_id: str, flooded_area_km2
     print(f"  exposure_stats: admin_boundary_id={admin_boundary_id} flooded_area_km2={flooded_area_km2:.4f} "
           f"({flooded_area_pct:.2f}%) pop={est_population_affected} buildings={est_buildings_affected}")
     return row
+
+
+# ---------------------------------------------------------------------------
+# reports
+# ---------------------------------------------------------------------------
+
+def create_report(event_id: str, pdf_storage_key: str) -> dict:
+    """reports has no unique constraint on event_id — "리포트는 재생성 가능"
+    (spec.md §6, the table's own comment) — so this always inserts a fresh
+    row rather than upserting. pipeline/reports.py itself is the one that
+    decides whether regeneration was actually needed (skips calling this at
+    all if a cached PDF file is reused)."""
+    url = f"{config.SUPABASE_URL}/rest/v1/reports"
+    body = {"event_id": event_id, "pdf_storage_key": pdf_storage_key}
+    resp = requests.post(url, headers=_headers(), json=body, timeout=30)
+    _check(resp, "reports insert")
+    row = resp.json()[0]
+    print(f"  reports: created (id={row['id']}, event_id={event_id}, pdf_storage_key={pdf_storage_key})")
+    return row

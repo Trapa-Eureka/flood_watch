@@ -64,6 +64,20 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
         <p style={{ fontSize: 13, color: "#666", marginTop: 4 }}>
           {aoiName} · {event.pre_event_date} → {event.post_event_date ?? "Ongoing"}
         </p>
+        {hasPost && (
+          // Week 4-7: hits /api/events/[id]/report, which generates the PDF
+          // on first request (pipeline/reports.py, Chrome-headless) and
+          // serves the cached file on every request after that — see that
+          // route's comments. Gated on hasPost, same as the Before/After
+          // section below: an event with no post-image yet has nothing a
+          // report could show either.
+          <a
+            href={`/api/events/${id}/report`}
+            style={{ display: "inline-block", marginTop: 10, fontSize: 13, color: "#2563eb", textDecoration: "none" }}
+          >
+            ⬇ Download PDF Report
+          </a>
+        )}
       </div>
 
       <section>
