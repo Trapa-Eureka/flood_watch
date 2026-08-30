@@ -3,6 +3,7 @@ import { spawn } from "child_process";
 import { existsSync, mkdirSync, openSync } from "fs";
 import path from "path";
 import supabaseAdmin from "@/lib/supabase-admin";
+import { requireAdmin } from "@/lib/require-admin";
 
 // POST /api/events/{id}/run — Week4-6 admin trigger UI: kicks off
 // pipeline/orchestrator.py's run_event_pipeline(event_id) as a detached
@@ -22,6 +23,9 @@ const PYTHON_BIN = path.join(REPO_ROOT, ".venv", "bin", "python3");
 const EVENTS_OUTPUT_DIR = path.join(REPO_ROOT, "data", "output", "events");
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireAdmin();
+  if (denied) return denied;
+
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) {
     return NextResponse.json({ error: "invalid event id" }, { status: 400 });

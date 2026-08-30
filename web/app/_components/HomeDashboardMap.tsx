@@ -6,7 +6,15 @@ import Link from "next/link";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { createBaseMap, PH_CENTER, PH_ZOOM } from "../_lib/maplibre-base";
-import supabasePublic from "@/lib/supabase-public";
+// Week 4-9: swapped from supabase-public.ts's plain anon client
+// (persistSession: false — never carries a login, ever) to the
+// cookie-backed browser client, so a logged-in viewer's region-search here
+// gets the same RLS tier (events_select_viewer / exposure_stats_select_
+// viewer) as the rest of the app — before this, the search box always
+// queried as anon client-side even while every server-rendered page had
+// already switched to session-aware. See lib/supabase-server.ts's comment
+// for the full before/after.
+import supabaseBrowser from "@/lib/supabase-browser";
 
 export type Overlay = {
   id: string;
@@ -260,7 +268,7 @@ export default function HomeDashboardMap({
       return;
     }
     debounceRef.current = setTimeout(async () => {
-      const { data } = await supabasePublic().rpc("search_admin_boundaries", { q: q.trim(), p_limit: 8 });
+      const { data } = await supabaseBrowser().rpc("search_admin_boundaries", { q: q.trim(), p_limit: 8 });
       setResults((data as SearchResult[] | null) ?? []);
     }, 300);
   }, []);
@@ -272,7 +280,7 @@ export default function HomeDashboardMap({
     setRegionStats(null);
 
     const map = mapRef.current;
-    const { data: geo } = await supabasePublic().rpc("admin_boundary_geojson", { p_id: r.id });
+    const { data: geo } = await supabaseBrowser().rpc("admin_boundary_geojson", { p_id: r.id });
     const row = (geo as { geojson: string }[] | null)?.[0];
     if (map && row?.geojson) {
       const geometry = JSON.parse(row.geojson);
@@ -294,7 +302,7 @@ export default function HomeDashboardMap({
       }
     }
 
-    const { data: stats } = await supabasePublic()
+    const { data: stats } = await supabaseBrowser()
       .from("exposure_stats")
       .select("flooded_area_km2, flooded_area_pct, est_population_affected, est_buildings_affected, events(name)")
       .eq("admin_boundary_id", r.id);

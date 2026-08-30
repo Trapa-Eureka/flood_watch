@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "fs";
 import path from "path";
 import { notFound } from "next/navigation";
-import supabasePublic from "@/lib/supabase-public";
+import supabaseServer from "@/lib/supabase-server";
 import BeforeAfterSlider from "./_components/BeforeAfterSlider";
 import FloodOverlayMap from "./_components/FloodOverlayMap";
 
@@ -14,7 +14,10 @@ type AdminBoundaryRef = { name: string; level: string } | null;
 
 export default async function EventDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = supabasePublic();
+  // Week 4-9: session-aware client (see events/page.tsx's comment for the
+  // full reasoning) — a logged-in viewer can now open a private-but-completed
+  // event's detail page directly, not just the public list.
+  const supabase = await supabaseServer();
 
   const { data: event, error: eventError } = await supabase
     .from("events")

@@ -1,12 +1,15 @@
 import { existsSync, readFileSync } from "fs";
 import path from "path";
-import supabasePublic from "@/lib/supabase-public";
+import supabaseServer from "@/lib/supabase-server";
 import HomeDashboardMap, { type NationalStats, type Overlay, type RainfallLayer } from "./_components/HomeDashboardMap";
 
-// 2026-08-29 home dashboard redesign — every number/layer here is real
-// (anon key, RLS-scoped to completed+public events, same as /events). No
-// forecast/prediction layer: this pipeline only detects flooding from
-// satellite imagery that has already arrived (see design-notes.md).
+// 2026-08-29 home dashboard redesign — every number/layer here is real,
+// RLS-scoped (session-aware client since Week 4-9 — see events/page.tsx's
+// comment: a logged-out visitor still only sees completed+public events,
+// same as before, but a logged-in viewer now sees every completed event on
+// this page too, not just the public ones). No forecast/prediction layer:
+// this pipeline only detects flooding from satellite imagery that has
+// already arrived (see design-notes.md).
 export const dynamic = "force-dynamic";
 
 const TILES_ROOT = path.resolve(process.cwd(), "..", "data", "output", "tiles");
@@ -68,7 +71,7 @@ async function fetchRainfallLayer(attempt = 1): Promise<RainfallLayer> {
 }
 
 export default async function Home() {
-  const supabase = supabasePublic();
+  const supabase = await supabaseServer();
 
   const { data: events } = await supabase
     .from("events")

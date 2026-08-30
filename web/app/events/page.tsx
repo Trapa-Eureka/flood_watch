@@ -1,5 +1,5 @@
 import Link from "next/link";
-import supabasePublic from "@/lib/supabase-public";
+import supabaseServer from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic"; // event list changes as the pipeline completes new ones — never cache stale
 export const metadata = { title: "PH Flood Watch — Events" };
@@ -12,11 +12,15 @@ const KIND_LABELS: Record<string, string> = {
 };
 
 export default async function EventsPage() {
-  // Anon key, RLS-bound (see lib/supabase-public.ts) — this genuinely only
-  // returns status='completed' AND visibility='public' rows (events_select_public
-  // policy, Week 1-3). Registered/processing/private events are invisible
-  // here on purpose, the same as a real anonymous visitor would see.
-  const { data: events, error } = await supabasePublic()
+  // Week 4-9: switched from supabase-public.ts's anon-only client to the
+  // session-aware one — RLS still does all the actual filtering (no new
+  // logic here), but now it filters against whoever is REALLY looking: a
+  // logged-out visitor gets events_select_public (completed+public only,
+  // same as before), a logged-in viewer gets events_select_viewer (every
+  // completed event, private ones included — spec.md §4's actual promise,
+  // which was previously unreachable because nothing ever authenticated as
+  // anyone other than anon), and an admin sees the same via events_select_admin.
+  const { data: events, error } = await (await supabaseServer())
     .from("events")
     .select("id, name, kind, pre_event_date, post_event_date, aois(name)")
     .order("pre_event_date", { ascending: false });
@@ -28,7 +32,7 @@ export default async function EventsPage() {
       {error && <p style={{ color: "#b91c1c" }}>Error: {error.message}</p>}
 
       {events?.length === 0 && (
-        <p style={{ color: "#666" }}>No completed public events to show yet.</p>
+        <p style={{ color: "#666" }}>No completed events to show yet.</p>
       )}
 
       <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: 8 }}>

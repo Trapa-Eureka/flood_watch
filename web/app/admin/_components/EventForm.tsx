@@ -32,7 +32,14 @@ export default function EventForm() {
   const [visibility, setVisibility] = useState<"private" | "public">("private");
 
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<{ ok: true; eventId: string } | { ok: false; error: string } | null>(null);
+  // Deliberately two separate nullable fields rather than a
+  // `{ok:true, eventId}|{ok:false, error}` discriminated union: this repo's
+  // tsconfig has `strict: false` (strictNullChecks off), and TS 5.9 fails to
+  // narrow a boolean-literal-discriminated union (`if (!result.ok) return
+  // result.error`) without strictNullChecks — same root cause fixed in
+  // web/lib/require-admin.ts. Plain nullable fields sidestep that narrowing.
+  const [result, setResult] = useState<{ eventId: string } | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/aois")
@@ -59,6 +66,7 @@ export default function EventForm() {
     e.preventDefault();
     setSubmitting(true);
     setResult(null);
+    setSubmitError(null);
 
     const body: Record<string, unknown> = {
       name,
@@ -81,9 +89,9 @@ export default function EventForm() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
-      setResult({ ok: true, eventId: data.event.id });
+      setResult({ eventId: data.event.id });
     } catch (err) {
-      setResult({ ok: false, error: err instanceof Error ? err.message : String(err) });
+      setSubmitError(err instanceof Error ? err.message : String(err));
     } finally {
       setSubmitting(false);
     }
@@ -188,9 +196,9 @@ export default function EventForm() {
         {submitting ? "Registering..." : "Register Event"}
       </button>
 
-      {result && (
-        <p style={{ color: result.ok ? "#166534" : "#b91c1c" }}>
-          {result.ok ? `Registered — event id: ${result.eventId}` : `Error: ${result.error}`}
+      {(result || submitError) && (
+        <p style={{ color: result ? "#166534" : "#b91c1c" }}>
+          {result ? `Registered — event id: ${result.eventId}` : `Error: ${submitError}`}
         </p>
       )}
     </form>

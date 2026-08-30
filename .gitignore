@@ -5,6 +5,13 @@
 .env.*
 !.env.example
 !.env.sample
+# Found live 2026-08-30 (Week 4-9): web/.env.local.example matches the
+# `.env.*` rule above but neither negation names it — it's been silently
+# untracked by git this entire project (`git ls-files` confirmed empty)
+# despite existing on disk and being referenced throughout docs/code as if
+# committed. **/ so this covers the pattern from any directory depth, not
+# just web/ — the same gap would hit any other .env.<env>.example file.
+!**/.env.local.example
 *.pem
 *.key
 *.keystore

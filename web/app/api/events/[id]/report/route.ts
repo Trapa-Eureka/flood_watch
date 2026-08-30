@@ -2,17 +2,18 @@ import { NextResponse } from "next/server";
 import { spawnSync } from "child_process";
 import { existsSync, readFileSync } from "fs";
 import path from "path";
-import supabasePublic from "@/lib/supabase-public";
+import supabaseServer from "@/lib/supabase-server";
 
 // GET /api/events/{id}/report — Week4-7: serves pipeline/reports.py's
 // generate_event_report() output (data/output/reports/{id}/report.pdf).
 //
-// supabasePublic() (anon key, RLS-gated), NOT supabaseAdmin() — same
-// reasoning as events/[id]/page.tsx: this is a public download link, so it
-// must go through the same RLS boundary a real visitor hits. A
-// processing/failed event is invisible under Week1-3's RLS policies, so the
-// .single() lookup below already gates on "completed and public" without a
-// separate status check.
+// Session-aware client (Week 4-9), NOT supabaseAdmin() — same reasoning as
+// events/[id]/page.tsx: this is a download link real visitors hit, so it
+// must go through the same RLS boundary a real visitor hits — for whoever
+// they actually are (anon/viewer/admin), not always anon regardless of
+// login. A processing/failed event, or a private one this caller isn't
+// entitled to, is invisible under RLS, so the .single() lookup below
+// already gates correctly without a separate status/visibility check.
 //
 // Generate-if-missing, synchronous: unlike Week4-6's GPU pipeline run
 // (3-6 minutes, backgrounded via detached spawn + polling), Chrome-headless
@@ -34,7 +35,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: "invalid event id" }, { status: 400 });
   }
 
-  const supabase = supabasePublic();
+  const supabase = await supabaseServer();
   const { data: event, error } = await supabase.from("events").select("id, name").eq("id", id).single();
   if (error || !event) return NextResponse.json({ error: "event not found" }, { status: 404 });
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import supabaseAdmin from "@/lib/supabase-admin";
+import { requireAdmin } from "@/lib/require-admin";
 import { bboxToWktPolygon, isValidBbox, type Bbox } from "@/app/_lib/geo";
 
 const EVENT_KINDS = ["typhoon", "monsoon", "manual", "backtest"] as const;
@@ -17,12 +18,15 @@ type CreateEventBody = {
 
 // POST /api/events — spec.md §7 events.create: register an event against
 // either an existing AOI (aoiId) or a freshly-drawn one (newAoi), Week 4-2's
-// "AOI 자유 지정 + 이벤트 등록". Runs with service_role (via supabase-admin,
-// see that module's own doc comment for the Week 4-9 auth gap this
-// deliberately doesn't solve yet) since aois/events have no anon/authenticated
-// INSERT policy — spec.md §4 gives write access to admin only, and until
-// real login exists, this route *is* that boundary, imperfect as it is.
+// "AOI 자유 지정 + 이벤트 등록". Runs with service_role (via supabase-admin)
+// since aois/events have no anon/authenticated INSERT policy — spec.md §4
+// gives write access to admin only. Week 4-9 closed the gap this comment
+// used to describe: requireAdmin() below is the real boundary now, not just
+// "whoever can reach this URL".
 export async function POST(req: Request) {
+  const denied = await requireAdmin();
+  if (denied) return denied;
+
   let body: CreateEventBody;
   try {
     body = await req.json();
@@ -91,6 +95,9 @@ export async function POST(req: Request) {
 // same reasoning as GET /api/aois: admins need to see 'registered'/
 // 'processing'/'failed' rows to actually trigger/monitor the pipeline.
 export async function GET() {
+  const denied = await requireAdmin();
+  if (denied) return denied;
+
   const { data, error } = await supabaseAdmin()
     .from("events")
     .select("id, name, kind, status, visibility, pre_event_date, post_event_date, created_at, aois(name)")
