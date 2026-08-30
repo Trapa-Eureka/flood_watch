@@ -142,6 +142,14 @@ export default function HomeDashboardMap({
   nationalStats: NationalStats;
   rainfall: RainfallLayer;
 }) {
+  // spec.md §13's standing Copernicus-attribution rule — see the legend
+  // panel below for where this renders. Distinct years across whatever
+  // overlays are actually passed in, not a single hardcoded year (this page
+  // can show several events/years on screen at once, unlike events/[id]/page.tsx).
+  const copernicusYears = Array.from(
+    new Set(overlays.map((o) => o.postEventDate).filter((d): d is string => !!d).map((d) => d.slice(0, 4))),
+  ).sort();
+
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [query, setQuery] = useState("");
@@ -559,8 +567,28 @@ export default function HomeDashboardMap({
                   </div>
                 ))}
               </div>
+              {/* spec.md §13's standing rule — same wording as
+                  events/[id]/page.tsx and pipeline/reports.py, which already
+                  carry it; this national map renders the exact same
+                  flood_overlay_preview.png files and was missing it (2026-08-30
+                  Week5-7 QA sweep). Years are computed from whichever overlays
+                  are actually on screen, not hardcoded — this page can show
+                  several events/years at once. */}
+              {copernicusYears.length > 0 && (
+                <div style={{ marginTop: 8, color: "#9ca3af" }}>
+                  Contains modified Copernicus Sentinel data {copernicusYears.join(", ")}.
+                </div>
+              )}
             </>
           )}
+        {/* Unconditional (not gated on overlays.length, unlike the Copernicus
+            line above) — the national stats panel above always shows
+            AI-derived numbers (flooded area/population/buildings) even before
+            any overlay image exists for the currently-toggled event set, so
+            this stays visible regardless. spec.md §13: never remove. */}
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(15,23,42,0.08)", color: "#9ca3af" }}>
+          This is an AI-generated estimate, not an official disaster determination. Please check official PAGASA/LGU announcements as well.
+        </div>
         </div>
     </>
   );
